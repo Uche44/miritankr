@@ -1,0 +1,77 @@
+# ============================================================
+# Root .gitignore for MiriTankr (covers backend + frontend)
+# ============================================================
+
+# ----------------------------
+# Python / Backend
+# ----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment
+backend/venv/
+venv/
+.venv/
+env/
+
+# Environment variables
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# SQLite databases (dev/test only)
+backend/*.db
+backend/**/*.db
+
+# Pytest cache
+.pytest_cache/
+backend/.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Alembic (keep migrations, ignore __pycache__ inside)
+backend/alembic/__pycache__/
+
+# Egg / distribution
+*.egg-info/
+dist/
+build/
+*.egg
+
+# MyPy
+.mypy_cache/
+
+# ----------------------------
+# Next.js / Frontend
+# ----------------------------
+miritankr/node_modules/
+miritankr/.next/
+miritankr/out/
+miritankr/build/
+miritankr/.env
+miritankr/.env.*
+!miritankr/.env.example
+
+# TypeScript build info
+*.tsbuildinfo
+miritankr/next-env.d.ts
+
+# ----------------------------
+# General
+# ----------------------------
+.DS_Store
+Thumbs.db
+*.pem
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.vercel
