@@ -47,6 +47,7 @@ class DriverTankerDetail(BaseModel):
     capacity_litres: int
     is_eligible_for_drinking: bool
     status: str
+    default_source_id: Optional[uuid.UUID] = None
 
 class DriverDetailResponse(BaseModel):
     id: uuid.UUID

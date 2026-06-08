@@ -78,6 +78,11 @@ class OrderRepository:
         Create a new order, immediately linked to the chosen driver and their tanker.
         Status starts as PENDING — driver must ACCEPT or REJECT.
         """
+        scheduled_at = order_in.scheduled_at
+        if scheduled_at is not None and scheduled_at.tzinfo is not None:
+            from datetime import timezone
+            scheduled_at = scheduled_at.astimezone(timezone.utc).replace(tzinfo=None)
+
         db_order = Order(
             customer_id=customer_id,
             water_type=order_in.water_type.upper(),
@@ -85,7 +90,7 @@ class OrderRepository:
             delivery_address=order_in.delivery_address,
             latitude=order_in.latitude,
             longitude=order_in.longitude,
-            scheduled_at=order_in.scheduled_at,
+            scheduled_at=scheduled_at,
             status="PENDING",
             price=calculated_price,
             assigned_driver_id=driver_id,

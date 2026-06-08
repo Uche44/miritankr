@@ -34,6 +34,7 @@ const Navbar: React.FC = () => {
         if (user.role === "ADMIN") return "/dashboard/admin";
         if (user.role === "FACILITY") return "/dashboard/facility";
         if (user.role === "DRIVER") return "/dashboard/driver";
+        if (user.role === "CUSTOMER") return "/dashboard/customer";
         return "/";
     };
 

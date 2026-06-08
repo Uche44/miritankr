@@ -18,6 +18,7 @@ from app.modules.tankers.models import Tanker
 from app.modules.drivers.models import Driver
 from app.modules.orders.models import Order
 from app.modules.tracking.models import TrackingEvent
+from app.modules.quality_reports.models import WaterQualityReport
 
 
 # This is the Alembic Config object

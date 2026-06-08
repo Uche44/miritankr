@@ -16,6 +16,7 @@ from app.modules.water_sources.schemas import (
     SourceLocation
 )
 from app.modules.water_sources.service import water_source_service
+from app.modules.quality_reports.repository import quality_report_repo
 
 router = APIRouter()
 
@@ -42,6 +43,7 @@ async def get_water_source_detail(
     Get details of a specific water source.
     """
     source = await water_source_service.get_source_by_id(db, id)
+    reports = await quality_report_repo.get_by_source(db, id)
     detail = WaterSourceDetail(
         id=source.id,
         name=source.name,
@@ -51,7 +53,7 @@ async def get_water_source_detail(
         last_verified_at=source.last_verified_at,
         owner_id=source.owner_id,
         created_at=source.created_at,
-        quality_reports=[],  # Stub list for quality reports
+        quality_reports=reports,
         location=SourceLocation(
             latitude=source.latitude,
             longitude=source.longitude,

@@ -26,7 +26,7 @@ const registerSchema = z.object({
   first_name: z.string().min(1, "First name is required"),
   last_name: z.string().min(1, "Last name is required"),
   phone: z.string().min(5, "Phone number must be at least 5 digits"),
-  role: z.enum(["CUSTOMER", "DRIVER", "FACILITY"]),
+  role: z.enum(["CUSTOMER", "DRIVER", "FACILITY", "ADMIN"]),
 });
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
@@ -36,7 +36,7 @@ export default function RegisterPage() {
   const { setAuth, isLoggedIn, isReady } = useAuthSession();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<"CUSTOMER" | "DRIVER" | "FACILITY">("CUSTOMER");
+  const [selectedRole, setSelectedRole] = useState<"CUSTOMER" | "DRIVER" | "FACILITY" | "ADMIN">("CUSTOMER");
 
   const {
     register,
@@ -51,7 +51,7 @@ export default function RegisterPage() {
   });
 
   // Keep react-hook-form and state in sync
-  const selectRole = (role: "CUSTOMER" | "DRIVER" | "FACILITY") => {
+  const selectRole = (role: "CUSTOMER" | "DRIVER" | "FACILITY" | "ADMIN") => {
     setSelectedRole(role);
     setValue("role", role);
   };
@@ -125,7 +125,7 @@ export default function RegisterPage() {
             <label className="block text-xs md:text-[16px] font-semibold text-gray-600">
               I want to sign up as a:
             </label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-2">
               {/* Customer Option */}
               <button
                 type="button"
@@ -136,7 +136,7 @@ export default function RegisterPage() {
                   }`}
               >
                 <Droplets size={20} className={selectedRole === "CUSTOMER" ? "text-primary " : "text-white"} />
-                <span className="text-[11px] font-bold mt-1.5 md:text-[15px]">Customer</span>
+                <span className="text-[10px] font-bold mt-1.5 md:text-[14px]">Customer</span>
               </button>
 
               {/* Driver Option */}
@@ -149,7 +149,7 @@ export default function RegisterPage() {
                   }`}
               >
                 <Truck size={20} className={selectedRole === "DRIVER" ? "text-primary" : "text-white"} />
-                <span className="text-[11px] font-bold mt-1.5 md:text-[15px]">Driver</span>
+                <span className="text-[10px] font-bold mt-1.5 md:text-[14px]">Driver</span>
               </button>
 
               {/* Facility Option */}
@@ -162,7 +162,20 @@ export default function RegisterPage() {
                   }`}
               >
                 <User size={20} className={selectedRole === "FACILITY" ? "text-primary" : "text-white"} />
-                <span className="text-[11px] font-bold mt-1.5 md:text-[15px]">Facility</span>
+                <span className="text-[10px] font-bold mt-1.5 md:text-[14px]">Facility</span>
+              </button>
+
+              {/* Admin Option */}
+              <button
+                type="button"
+                onClick={() => selectRole("ADMIN")}
+                className={`flex flex-col items-center justify-center p-3 rounded-xl border text-white text-center transition-all ${selectedRole === "ADMIN"
+                  ? "bg-primary/20 border-primary"
+                  : "bg-primary hover:border-primary/40"
+                  }`}
+              >
+                <ShieldAlert size={20} className={selectedRole === "ADMIN" ? "text-primary" : "text-white"} />
+                <span className="text-[10px] font-bold mt-1.5 md:text-[14px]">Admin</span>
               </button>
             </div>
             {errors.role && (

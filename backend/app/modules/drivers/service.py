@@ -151,7 +151,8 @@ class DriverService:
                 plate_number=driver.tanker.plate_number,
                 capacity_litres=driver.tanker.capacity_litres,
                 is_eligible_for_drinking=is_eligible,
-                status=driver.tanker.status
+                status=driver.tanker.status,
+                default_source_id=driver.tanker.default_source_id
             )
 
         return DriverDetailResponse(

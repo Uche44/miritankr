@@ -29,8 +29,14 @@ class OrderCreate(BaseModel):
     @field_validator("scheduled_at")
     @classmethod
     def validate_scheduled_at(cls, value: Optional[datetime]) -> Optional[datetime]:
-        if value is not None and value < datetime.utcnow():
-            raise ValueError("Scheduled time must be in the future")
+        if value is not None:
+            val_naive = value
+            if val_naive.tzinfo is not None:
+                from datetime import timezone
+                val_naive = val_naive.astimezone(timezone.utc).replace(tzinfo=None)
+            if val_naive < datetime.utcnow():
+                raise ValueError("Scheduled time must be in the future")
+            return val_naive
         return value
 
 
