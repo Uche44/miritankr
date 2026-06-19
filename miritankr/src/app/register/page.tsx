@@ -36,7 +36,7 @@ export default function RegisterPage() {
   const { setAuth, isLoggedIn, isReady } = useAuthSession();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<"CUSTOMER" | "DRIVER" | "FACILITY" | "ADMIN">("CUSTOMER");
+  const [selectedRole, setSelectedRole] = useState<"CUSTOMER" | "DRIVER" | "FACILITY">("CUSTOMER");
 
   const {
     register,
@@ -51,7 +51,7 @@ export default function RegisterPage() {
   });
 
   // Keep react-hook-form and state in sync
-  const selectRole = (role: "CUSTOMER" | "DRIVER" | "FACILITY" | "ADMIN") => {
+  const selectRole = (role: "CUSTOMER" | "DRIVER" | "FACILITY") => {
     setSelectedRole(role);
     setValue("role", role);
   };
@@ -125,7 +125,7 @@ export default function RegisterPage() {
             <label className="block text-xs md:text-[16px] font-semibold text-gray-600">
               I want to sign up as a:
             </label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {/* Customer Option */}
               <button
                 type="button"
@@ -163,19 +163,6 @@ export default function RegisterPage() {
               >
                 <User size={20} className={selectedRole === "FACILITY" ? "text-primary" : "text-white"} />
                 <span className="text-[10px] font-bold mt-1.5 md:text-[14px]">Facility</span>
-              </button>
-
-              {/* Admin Option */}
-              <button
-                type="button"
-                onClick={() => selectRole("ADMIN")}
-                className={`flex flex-col items-center justify-center p-3 rounded-xl border text-white text-center transition-all ${selectedRole === "ADMIN"
-                  ? "bg-primary/20 border-primary"
-                  : "bg-primary hover:border-primary/40"
-                  }`}
-              >
-                <ShieldAlert size={20} className={selectedRole === "ADMIN" ? "text-primary" : "text-white"} />
-                <span className="text-[10px] font-bold mt-1.5 md:text-[14px]">Admin</span>
               </button>
             </div>
             {errors.role && (

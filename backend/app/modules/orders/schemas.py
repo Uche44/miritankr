@@ -79,6 +79,8 @@ class OrderResponse(BaseModel):
     price: float
     created_at: datetime
     updated_at: datetime
+    payment_status: Optional[str] = None
+    payment_reference: Optional[str] = None
 
     class Config:
         from_attributes = True

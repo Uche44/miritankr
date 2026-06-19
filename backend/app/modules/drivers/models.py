@@ -40,6 +40,12 @@ class Driver(Base):
         nullable=False
     )
 
+    # Bank account details (verified via Paystack)
+    bank_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    bank_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    account_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    account_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+
     # Relationships
     user = relationship("User", foreign_keys=[id])
     tanker = relationship("Tanker", foreign_keys=[tanker_id])

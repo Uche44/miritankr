@@ -135,6 +135,28 @@ class OrderService:
             },
         )
 
+        # Auto-initialize pending payment record
+        from app.modules.payments.repository import payment_repo
+        reference = f"pay_mock_{uuid.uuid4().hex}"
+        await payment_repo.create(
+            db=db,
+            order_id=db_order.id,
+            amount=price,
+            reference=reference
+        )
+
+        # Create notification for Driver
+        from app.modules.notifications.service import notification_service
+        customer_name = f"{current_user.first_name} {current_user.last_name}"
+        await notification_service.create_notification(
+            db=db,
+            user_id=order_in.driver_id,
+            order_id=db_order.id,
+            title="New Order Request",
+            message=f"You have received a new water order from {customer_name} for {db_order.quantity_litres}L.",
+            notification_type="ORDER_CREATED"
+        )
+
         await db.commit()
         return db_order
 
@@ -252,6 +274,8 @@ class OrderService:
                         f"Allowed next statuses: {sorted(allowed_next)}."
                     ),
                 )
+            
+            pass
 
         elif current_user.role == "CUSTOMER":
             if current_user.id != order.customer_id:
@@ -294,8 +318,191 @@ class OrderService:
             actor_id=current_user.id,
         )
 
+        # Trigger notification based on status transitions
+        from app.modules.notifications.service import notification_service
+        actor_name = current_user.first_name
+
+        if new_status == "ACCEPTED":
+            await notification_service.create_notification(
+                db=db,
+                user_id=updated_order.customer_id,
+                order_id=updated_order.id,
+                title="Order Accepted",
+                message=f"Your order has been accepted by driver {actor_name}.",
+                notification_type="ORDER_ACCEPTED"
+            )
+        elif new_status == "REJECTED":
+            await notification_service.create_notification(
+                db=db,
+                user_id=updated_order.customer_id,
+                order_id=updated_order.id,
+                title="Order Declined",
+                message=f"Driver {actor_name} has declined your order request.",
+                notification_type="ORDER_REJECTED"
+            )
+        elif new_status == "GOING_TO_SOURCE":
+            await notification_service.create_notification(
+                db=db,
+                user_id=updated_order.customer_id,
+                order_id=updated_order.id,
+                title="Driver Dispatched",
+                message=f"Driver {actor_name} is now heading to the water source depot.",
+                notification_type="ORDER_DISPATCHED"
+            )
+        elif new_status == "LOADING_WATER":
+            await notification_service.create_notification(
+                db=db,
+                user_id=updated_order.customer_id,
+                order_id=updated_order.id,
+                title="Loading Water",
+                message=f"Driver {actor_name} is filling the tanker at the depot.",
+                notification_type="ORDER_FILLED"
+            )
+        elif new_status == "EN_ROUTE":
+            await notification_service.create_notification(
+                db=db,
+                user_id=updated_order.customer_id,
+                order_id=updated_order.id,
+                title="Order En Route",
+                message=f"Driver {actor_name} is en route to your delivery address.",
+                notification_type="ORDER_EN_ROUTE"
+            )
+        elif new_status == "ARRIVED":
+            await notification_service.create_notification(
+                db=db,
+                user_id=updated_order.customer_id,
+                order_id=updated_order.id,
+                title="Driver Arrived",
+                message=f"Driver {actor_name} has arrived at your address.",
+                notification_type="ORDER_ARRIVED"
+            )
+        elif new_status == "DELIVERED":
+            await notification_service.create_notification(
+                db=db,
+                user_id=updated_order.customer_id,
+                order_id=updated_order.id,
+                title="Order Delivered",
+                message="Your water delivery is complete. Please review and process payment.",
+                notification_type="ORDER_DELIVERED"
+            )
+        elif new_status == "CANCELLED":
+            if current_user.role == "CUSTOMER":
+                await notification_service.create_notification(
+                    db=db,
+                    user_id=updated_order.assigned_driver_id,
+                    order_id=updated_order.id,
+                    title="Order Cancelled",
+                    message=f"The order has been cancelled by customer {actor_name}.",
+                    notification_type="ORDER_CANCELLED"
+                )
+            elif current_user.role == "DRIVER":
+                await notification_service.create_notification(
+                    db=db,
+                    user_id=updated_order.customer_id,
+                    order_id=updated_order.id,
+                    title="Order Cancelled",
+                    message=f"Your order has been cancelled by driver {actor_name}.",
+                    notification_type="ORDER_CANCELLED"
+                )
+            elif current_user.role == "ADMIN":
+                await notification_service.create_notification(
+                    db=db,
+                    user_id=updated_order.customer_id,
+                    order_id=updated_order.id,
+                    title="Order Cancelled by Admin",
+                    message="Your order was cancelled by the administrator.",
+                    notification_type="ORDER_CANCELLED"
+                )
+                if updated_order.assigned_driver_id:
+                    await notification_service.create_notification(
+                        db=db,
+                        user_id=updated_order.assigned_driver_id,
+                        order_id=updated_order.id,
+                        title="Order Cancelled by Admin",
+                        message="The order was cancelled by the administrator.",
+                        notification_type="ORDER_CANCELLED"
+                    )
+
         await db.commit()
         await db.refresh(updated_order)
+
+        # Broadcast status change to WebSocket tracking connections
+        from app.modules.tracking.websocket import manager
+        await manager.broadcast_to_order(
+            str(updated_order.id),
+            {
+                "event": "ORDER_STATUS_CHANGED",
+                "data": {
+                    "order_id": str(updated_order.id),
+                    "status": new_status,
+                }
+            }
+        )
+
+        # Manage Telemetry Simulation Background Tasks
+        from app.modules.tracking.simulation import start_simulation, stop_simulation
+        from app.modules.drivers.models import Driver
+        from app.modules.water_sources.models import WaterSource
+
+        if new_status == "GOING_TO_SOURCE":
+            # 1. Fetch driver starting coordinates
+            driver_result = await db.execute(
+                select(Driver).where(Driver.id == updated_order.assigned_driver_id)
+            )
+            driver = driver_result.scalars().first()
+            driver_lat = driver.latitude if (driver and driver.latitude is not None) else 6.44
+            driver_lng = driver.longitude if (driver and driver.longitude is not None) else 7.50
+
+            # 2. Fetch water source coordinates
+            source_lat, source_lng = 6.4253, 7.4042 # default to 9th mile
+            if updated_order.source_id:
+                src_result = await db.execute(
+                    select(WaterSource).where(WaterSource.id == updated_order.source_id)
+                )
+                source = src_result.scalars().first()
+                if source:
+                    source_lat = source.latitude
+                    source_lng = source.longitude
+
+            # 3. Start simulation
+            start_simulation(
+                order_id=updated_order.id,
+                start_lat=driver_lat,
+                start_lng=driver_lng,
+                target_lat=source_lat,
+                target_lng=source_lng,
+                driver_id=updated_order.assigned_driver_id,
+            )
+
+        elif new_status == "EN_ROUTE":
+            # 1. Start coordinates are the Water Source coordinates
+            source_lat, source_lng = 6.4253, 7.4042 # default
+            if updated_order.source_id:
+                src_result = await db.execute(
+                    select(WaterSource).where(WaterSource.id == updated_order.source_id)
+                )
+                source = src_result.scalars().first()
+                if source:
+                    source_lat = source.latitude
+                    source_lng = source.longitude
+
+            # 2. Target coordinates are the Customer coordinates
+            customer_lat = updated_order.latitude
+            customer_lng = updated_order.longitude
+
+            # 3. Start simulation
+            start_simulation(
+                order_id=updated_order.id,
+                start_lat=source_lat,
+                start_lng=source_lng,
+                target_lat=customer_lat,
+                target_lng=customer_lng,
+                driver_id=updated_order.assigned_driver_id,
+            )
+
+        elif new_status in ["DELIVERED", "ARRIVED", "CANCELLED", "REJECTED"]:
+            stop_simulation(updated_order.id)
+
         return updated_order
 
 

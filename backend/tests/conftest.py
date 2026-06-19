@@ -57,12 +57,28 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
         await session.close()
 
 @pytest.fixture(autouse=True)
-def override_get_db(db_session):
+def override_database_sessions(test_engine, db_session):
     """
-    Override the production get_db dependency injection with the test session.
+    Override the production get_db dependency and AsyncSessionLocal
+    with the test database engine session makers.
     """
+    import app.core.database as core_db
+    from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+
+    original_session_local = core_db.AsyncSessionLocal
+
+    test_session_maker = async_sessionmaker(
+        bind=test_engine,
+        expire_on_commit=False,
+        class_=AsyncSession,
+    )
+    core_db.AsyncSessionLocal = test_session_maker
+
     async def _override_get_db():
         yield db_session
     app.dependency_overrides[get_db] = _override_get_db
+
     yield
+
+    core_db.AsyncSessionLocal = original_session_local
     app.dependency_overrides.clear()

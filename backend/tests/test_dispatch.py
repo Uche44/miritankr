@@ -169,7 +169,7 @@ async def test_marketplace_full_lifecycle():
         assert res_wrong_driver.status_code == 403
 
         # -----------------------------------------------------------------------
-        # TEST 7: Driver ACCEPTS the order -> PENDING to ACCEPTED
+        # TEST 7: Driver ACCEPTS the order -> PENDING to ACCEPTED (should succeed immediately without payment)
         # -----------------------------------------------------------------------
         res_accept = await ac.patch(f"/api/v1/orders/{order_id}/status",
                                      json={"status": "ACCEPTED"},
@@ -198,6 +198,24 @@ async def test_marketplace_full_lifecycle():
         await advance("EN_ROUTE")
         await advance("ARRIVED")
         await advance("DELIVERED")
+
+        # -----------------------------------------------------------------------
+        # TEST 8.5: Customer completes payment after delivery
+        # -----------------------------------------------------------------------
+        res_init = await ac.post("/api/v1/payments/initialize", json={"order_id": order_id},
+                                 headers={"Authorization": f"Bearer {customer_token}"})
+        assert res_init.status_code == 200
+        checkout_url = res_init.json()["data"]["checkout_url"]
+        reference = checkout_url.split("/")[-1]
+
+        res_wh = await ac.post("/api/v1/payments/webhook", json={
+            "event": "charge.success",
+            "data": {
+                "reference": reference,
+                "status": "success"
+            }
+        })
+        assert res_wh.status_code == 200
 
         # Terminal — cannot update a DELIVERED order
         res_terminal = await ac.patch(f"/api/v1/orders/{order_id}/status",

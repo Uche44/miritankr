@@ -63,3 +63,55 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
         finally:
             await session.close()
+
+async def seed_mock_sources(db: AsyncSession):
+    from app.modules.water_sources.models import WaterSource
+    from sqlalchemy import select
+    
+    mock_sources = [
+        {
+            "name": "9th Mile Water Treatment Plant",
+            "type": "TREATMENT_PLANT",
+            "verification_status": "VERIFIED",
+            "quality_grade": "A",
+            "address": "9th Mile Corner, Ngwo, Enugu State",
+            "latitude": 6.4253,
+            "longitude": 7.4042,
+        },
+        {
+            "name": "Artisan Market Borehole Depot",
+            "type": "BOREHOLE",
+            "verification_status": "VERIFIED",
+            "quality_grade": "B",
+            "address": "Ogui Road, Asata, Enugu State",
+            "latitude": 6.4428,
+            "longitude": 7.5186,
+        },
+        {
+            "name": "Independence Layout Reservoir",
+            "type": "RESERVOIR",
+            "verification_status": "PENDING",
+            "quality_grade": None,
+            "address": "Independence Layout, Enugu State",
+            "latitude": 6.4281,
+            "longitude": 7.5024,
+        }
+    ]
+    
+    for src_data in mock_sources:
+        result = await db.execute(
+            select(WaterSource).where(WaterSource.name == src_data["name"])
+        )
+        existing = result.scalars().first()
+        if not existing:
+            new_source = WaterSource(
+                name=src_data["name"],
+                type=src_data["type"],
+                verification_status=src_data["verification_status"],
+                quality_grade=src_data["quality_grade"],
+                address=src_data["address"],
+                latitude=src_data["latitude"],
+                longitude=src_data["longitude"],
+            )
+            db.add(new_source)
+    await db.commit()

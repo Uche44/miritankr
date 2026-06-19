@@ -10,6 +10,12 @@ app = FastAPI(
     redoc_url=f"{settings.API_V1_STR}/redoc",
 )
 
+@app.on_event("startup")
+async def on_startup():
+    from app.core.database import AsyncSessionLocal, seed_mock_sources
+    async with AsyncSessionLocal() as db:
+        await seed_mock_sources(db)
+
 @app.get("/", include_in_schema=False)
 async def redirect_to_docs():
     return RedirectResponse(url=f"{settings.API_V1_STR}/docs")

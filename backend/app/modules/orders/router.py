@@ -22,6 +22,16 @@ router = APIRouter()
 
 def _order_to_response(o) -> OrderResponse:
     """Convert an Order ORM object to OrderResponse schema."""
+    payment_status = None
+    payment_reference = None
+    try:
+        if o.payments:
+            latest_payment = sorted(o.payments, key=lambda p: p.timestamp, reverse=True)[0]
+            payment_status = latest_payment.status
+            payment_reference = latest_payment.reference
+    except Exception:
+        pass
+
     return OrderResponse(
         id=o.id,
         customer_id=o.customer_id,
@@ -38,6 +48,8 @@ def _order_to_response(o) -> OrderResponse:
         price=float(o.price),
         created_at=o.created_at,
         updated_at=o.updated_at,
+        payment_status=payment_status,
+        payment_reference=payment_reference,
     )
 
 

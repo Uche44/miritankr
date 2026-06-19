@@ -12,7 +12,8 @@ from app.modules.drivers.schemas import (
     DriverTankerUpdate,
     DriverDetailResponse,
     DriverUserDetail,
-    DriverTankerDetail
+    DriverTankerDetail,
+    DriverBankAccountUpdate
 )
 from app.modules.auth.repository import user_repo
 from app.modules.tankers.repository import tanker_repo
@@ -83,6 +84,32 @@ class DriverService:
         }
         updated_driver = await driver_repo.update(db, driver, update_data)
         await db.commit()
+
+        # Broadcast live GPS telemetry to active orders
+        from app.modules.orders.models import Order
+        from sqlalchemy import select
+        from app.modules.tracking.websocket import manager
+
+        result = await db.execute(
+            select(Order).where(
+                Order.assigned_driver_id == driver_id,
+                Order.status.in_(["ACCEPTED", "GOING_TO_SOURCE", "LOADING_WATER", "EN_ROUTE", "ARRIVED"])
+            )
+        )
+        active_orders = result.scalars().all()
+        for order in active_orders:
+            await manager.broadcast_to_order(
+                str(order.id),
+                {
+                    "event": "DRIVER_LOCATION_UPDATED",
+                    "data": {
+                        "order_id": str(order.id),
+                        "latitude": location_in.latitude,
+                        "longitude": location_in.longitude,
+                    }
+                }
+            )
+
         return updated_driver
 
     async def assign_tanker(
@@ -162,7 +189,74 @@ class DriverService:
             longitude=driver.longitude,
             last_location_update=driver.last_location_update,
             user=user_detail,
-            tanker=tanker_detail
+            tanker=tanker_detail,
+            bank_code=driver.bank_code,
+            bank_name=driver.bank_name,
+            account_number=driver.account_number,
+            account_name=driver.account_name
         )
+
+    async def get_driver_earnings(self, db: AsyncSession, driver_id: uuid.UUID):
+        """
+        Fetch all successful payments for orders assigned to this driver and compute aggregate.
+        """
+        from app.modules.payments.models import Payment
+        from app.modules.orders.models import Order
+        from app.modules.auth.models import User
+        from sqlalchemy import select
+
+        stmt = (
+            select(Payment, Order, User)
+            .join(Order, Payment.order_id == Order.id)
+            .join(User, Order.customer_id == User.id)
+            .where(Order.assigned_driver_id == driver_id)
+            .where(Payment.status == "SUCCESSFUL")
+            .order_by(Payment.timestamp.desc())
+        )
+        
+        result = await db.execute(stmt)
+        rows = result.all()
+
+        earnings_logs = []
+        total_earnings = 0.0
+
+        for payment, order, customer in rows:
+            amount = float(payment.amount)
+            total_earnings += amount
+            earnings_logs.append({
+                "payment_id": payment.id,
+                "payment_reference": payment.reference,
+                "amount": amount,
+                "timestamp": payment.timestamp,
+                "order_id": order.id,
+                "customer_name": f"{customer.first_name} {customer.last_name}",
+                "water_type": order.water_type,
+                "quantity_litres": order.quantity_litres
+            })
+
+        return {
+            "total_earnings": total_earnings,
+            "earnings_logs": earnings_logs
+        }
+
+    async def update_bank_account(
+        self,
+        db: AsyncSession,
+        driver_id: uuid.UUID,
+        payload: DriverBankAccountUpdate
+    ) -> Driver:
+        """
+        Update the driver's bank account details.
+        """
+        driver = await self.get_driver_or_create(db, driver_id)
+        update_data = {
+            "bank_code": payload.bank_code,
+            "bank_name": payload.bank_name,
+            "account_number": payload.account_number,
+            "account_name": payload.account_name
+        }
+        updated_driver = await driver_repo.update(db, driver, update_data)
+        await db.commit()
+        return updated_driver
 
 driver_service = DriverService()

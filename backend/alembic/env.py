@@ -19,6 +19,9 @@ from app.modules.drivers.models import Driver
 from app.modules.orders.models import Order
 from app.modules.tracking.models import TrackingEvent
 from app.modules.quality_reports.models import WaterQualityReport
+from app.modules.payments.models import Payment
+from app.modules.ratings.models import Rating
+from app.modules.notifications.models import Notification
 
 
 # This is the Alembic Config object

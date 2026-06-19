@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthSession } from "../../hooks/use-auth-session";
 import ProtectedRoute from "../shared/protected-route";
+import { apiFetch } from "../../lib/api-client";
 import { 
   Menu, 
   X, 
@@ -20,7 +21,9 @@ import {
   ShieldCheck,
   MapPin,
   Clock,
-  Layers
+  Layers,
+  Bell,
+  CheckCheck
 } from "lucide-react";
 
 interface NavItem {
@@ -49,8 +52,111 @@ export default function DashboardLayout({
   tabs
 }: DashboardLayoutProps) {
   const router = useRouter();
-  const { user, clearAuth } = useAuthSession();
+  const { user, token, clearAuth } = useAuthSession();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await apiFetch("/notifications");
+      if (res.success && res.data) {
+        setNotifications(res.data);
+      }
+    } catch (err) {
+      console.error("Error fetching notifications:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (user && token) {
+      // Fetch initial notifications list
+      fetchNotifications();
+
+      // Setup Server-Sent Events (SSE) connection
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+      const sseUrl = `${API_BASE_URL}/notifications/stream?token=${encodeURIComponent(token)}`;
+      const eventSource = new EventSource(sseUrl);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const newNotification = JSON.parse(event.data);
+          setNotifications(prev => {
+            // Avoid duplicate items
+            if (prev.some(n => n.id === newNotification.id)) {
+              return prev;
+            }
+            return [newNotification, ...prev];
+          });
+        } catch (err) {
+          console.error("Error parsing SSE notification:", err);
+        }
+      };
+
+      eventSource.onerror = (err) => {
+        console.error("SSE connection error. Reconnecting...", err);
+      };
+
+      return () => {
+        eventSource.close();
+      };
+    }
+  }, [user, token]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowNotificationsDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      const res = await apiFetch(`/notifications/${id}/read`, { method: "PUT" });
+      if (res.success) {
+        setNotifications(prev =>
+          prev.map(n => (n.id === id ? { ...n, is_read: true } : n))
+        );
+      }
+    } catch (err) {
+      console.error("Error marking notification as read:", err);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      const res = await apiFetch("/notifications/read-all", { method: "PUT" });
+      if (res.success) {
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      }
+    } catch (err) {
+      console.error("Error marking all notifications as read:", err);
+    }
+  };
+
+  const getRelativeTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHr = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHr / 24);
+
+    if (diffSec < 60) return "just now";
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHr < 24) return `${diffHr}h ago`;
+    return `${diffDay}d ago`;
+  };
+
+  const unreadCount = notifications.filter(n => !n.is_read).length;
 
   const handleLogout = () => {
     clearAuth();
@@ -214,7 +320,7 @@ export default function DashboardLayout({
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           
           {/* HEADER - Global Top bar */}
-          <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 shadow-sm relative z-0">
+          <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 shadow-sm relative z-30">
             {/* Left side: Hamburger (Mobile) or Welcome */}
             <div className="flex items-center gap-4">
               <button
@@ -239,7 +345,81 @@ export default function DashboardLayout({
                 <Home size={12} />
                 <span>Visit Homepage</span>
               </Link>
+              
               <div className="h-8 w-[1px] bg-slate-200 hidden md:block"></div>
+
+              {/* Notification Bell & Dropdown */}
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  onClick={() => setShowNotificationsDropdown(!showNotificationsDropdown)}
+                  className="relative p-2 text-slate-650 hover:bg-slate-50 border border-slate-200 rounded-xl transition-all duration-200 focus:outline-none"
+                  aria-label="Toggle notifications"
+                >
+                  <Bell size={18} />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white ring-2 ring-white animate-pulse">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {showNotificationsDropdown && (
+                  <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-150 z-50 overflow-hidden animate-slide-up transform origin-top-right">
+                    {/* Header */}
+                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                      <span className="text-xs font-black uppercase tracking-wider text-slate-800">Notifications</span>
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={handleMarkAllAsRead}
+                          className="flex items-center gap-1 text-[10px] font-bold text-[#2f43ff] hover:text-[#1d2ec7] uppercase tracking-wide transition-colors"
+                        >
+                          <CheckCheck size={12} />
+                          Mark all as read
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Notification List */}
+                    <div className="max-h-[360px] overflow-y-auto divide-y divide-slate-100">
+                      {notifications.length === 0 ? (
+                        <div className="px-4 py-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
+                          <Bell size={24} className="stroke-slate-300" />
+                          <p>No notifications yet</p>
+                        </div>
+                      ) : (
+                        notifications.map((n) => (
+                          <div
+                            key={n.id}
+                            onClick={() => !n.is_read && handleMarkAsRead(n.id)}
+                            className={`p-4 flex gap-3 cursor-pointer transition-all ${
+                              n.is_read ? "bg-white hover:bg-slate-50/50" : "bg-blue-50/40 hover:bg-blue-50/80 border-l-4 border-l-[#2f43ff]"
+                            }`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-1.5">
+                                <p className={`text-xs font-extrabold text-slate-900 ${!n.is_read ? "text-[#2f43ff]" : ""}`}>
+                                  {n.title}
+                                </p>
+                                <span className="text-[9px] text-slate-400 font-bold whitespace-nowrap shrink-0 mt-0.5">
+                                  {getRelativeTime(n.created_at)}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-600 mt-1 font-medium leading-relaxed">
+                                {n.message}
+                              </p>
+                            </div>
+                            {!n.is_read && (
+                              <div className="h-2 w-2 rounded-full bg-[#2f43ff] shrink-0 mt-1.5 self-start" />
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="h-8 w-[1px] bg-slate-200"></div>
               
               <div className="flex items-center gap-3">
                 <span className="text-xs font-black text-slate-900">{user?.first_name} {user?.last_name}</span>

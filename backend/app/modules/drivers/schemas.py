@@ -57,9 +57,19 @@ class DriverDetailResponse(BaseModel):
     last_location_update: Optional[datetime] = None
     user: DriverUserDetail
     tanker: Optional[DriverTankerDetail] = None
+    bank_code: Optional[str] = None
+    bank_name: Optional[str] = None
+    account_number: Optional[str] = None
+    account_name: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+class DriverBankAccountUpdate(BaseModel):
+    bank_code: str = Field(..., description="Paystack bank code (e.g. 057)")
+    bank_name: str = Field(..., description="Name of the bank")
+    account_number: str = Field(..., min_length=10, max_length=10, description="10-digit account number")
+    account_name: str = Field(..., description="Resolved account name")
 
 # Standard envelope schemas matching docs/api-contracts.md
 class BaseEnvelope(BaseModel):
@@ -74,3 +84,28 @@ class DriverDetailEnvelope(BaseEnvelope):
 
 class DriverListEnvelope(BaseEnvelope):
     data: List[DriverDetailResponse]
+
+class EarningLogItem(BaseModel):
+    payment_id: uuid.UUID
+    payment_reference: str
+    amount: float
+    timestamp: datetime
+    order_id: uuid.UUID
+    customer_name: str
+    water_type: str
+    quantity_litres: int
+
+    class Config:
+        from_attributes = True
+
+class DriverEarningsResponse(BaseModel):
+    total_earnings: float
+    earnings_logs: List[EarningLogItem]
+
+    class Config:
+        from_attributes = True
+
+class DriverEarningsEnvelope(BaseModel):
+    success: bool = True
+    message: Optional[str] = None
+    data: DriverEarningsResponse

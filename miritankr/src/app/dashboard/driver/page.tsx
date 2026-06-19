@@ -27,7 +27,11 @@ import {
   Navigation,
   RefreshCw,
   User as UserIcon,
-  Layers
+  Layers,
+  Wallet,
+  Crosshair,
+  Globe,
+  Loader2
 } from "lucide-react";
 
 // Form Schema
@@ -47,11 +51,15 @@ const registerTankerSchema = z.object({
 
 type RegisterTankerFormValues = z.infer<typeof registerTankerSchema>;
 
+import MapComponent from "../../../components/map/map-component";
+
 interface WaterSource {
   id: string;
   name: string;
   type: string;
   verification_status: string;
+  latitude: number;
+  longitude: number;
 }
 
 interface Tanker {
@@ -74,6 +82,10 @@ interface Driver {
   longitude: number | null;
   last_location_update: string | null;
   created_at: string;
+  bank_code?: string | null;
+  bank_name?: string | null;
+  account_number?: string | null;
+  account_name?: string | null;
 }
 
 interface Order {
@@ -89,6 +101,10 @@ interface Order {
   source_id: string | null;
   created_at: string;
   scheduled_at: string | null;
+  payment_status?: string | null;
+  payment_reference?: string | null;
+  latitude: number;
+  longitude: number;
 }
 
 const ENUGU_PRESETS = [
@@ -111,6 +127,16 @@ export default function DriverDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [updatingOrderStatus, setUpdatingOrderStatus] = useState<string | null>(null);
+  const [earningsData, setEarningsData] = useState<any>(null);
+
+  // Bank details states
+  const [banks, setBanks] = useState<{ name: string; code: string }[]>([]);
+  const [selectedBankCode, setSelectedBankCode] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [resolvedAccountName, setResolvedAccountName] = useState("");
+  const [resolvingAccount, setResolvingAccount] = useState(false);
+  const [savingBankAccount, setSavingBankAccount] = useState(false);
+  const [loadingBanks, setLoadingBanks] = useState(false);
   
   // User Actions Feedback
   const [error, setError] = useState<string | null>(null);
@@ -164,6 +190,12 @@ export default function DriverDashboardPage() {
         const ordersRes = await apiFetch("/orders");
         if (ordersRes && ordersRes.success) {
           setOrders(ordersRes.data);
+        }
+
+        // 4. Fetch driver earnings
+        const earningsRes = await apiFetch("/drivers/me/earnings");
+        if (earningsRes && earningsRes.success) {
+          setEarningsData(earningsRes.data);
         }
       } else {
         setShowRegForm(true);
@@ -228,6 +260,86 @@ export default function DriverDashboardPage() {
       }
     };
   }, [driver?.status, driver?.tanker_id]);
+
+  // Fetch banks on mount or activeTab changes to profile
+  useEffect(() => {
+    if (activeTab === "profile" && banks.length === 0) {
+      const fetchBanks = async () => {
+        setLoadingBanks(true);
+        try {
+          const res = await apiFetch("/payments/banks");
+          if (res?.success) {
+            setBanks(res.data);
+          }
+        } catch (err: any) {
+          console.error("Failed to fetch banks:", err);
+        } finally {
+          setLoadingBanks(false);
+        }
+      };
+      fetchBanks();
+    }
+  }, [activeTab, banks.length]);
+
+  // Set initial bank values if driver already has them saved
+  useEffect(() => {
+    if (driver) {
+      if (driver.bank_code) setSelectedBankCode(driver.bank_code);
+      if (driver.account_number) setAccountNumber(driver.account_number);
+      if (driver.account_name) setResolvedAccountName(driver.account_name);
+    }
+  }, [driver]);
+
+  // Auto-resolve account number when length reaches 10
+  useEffect(() => {
+    if (accountNumber.length === 10 && selectedBankCode) {
+      const resolveAccount = async () => {
+        setResolvingAccount(true);
+        setResolvedAccountName("");
+        try {
+          const res = await apiFetch(`/payments/resolve-account?account_number=${accountNumber}&bank_code=${selectedBankCode}`);
+          if (res?.success) {
+            setResolvedAccountName(res.data.account_name);
+          }
+        } catch (err: any) {
+          setError(err.message || "Failed to resolve bank account name.");
+        } finally {
+          setResolvingAccount(false);
+        }
+      };
+      resolveAccount();
+    } else {
+      setResolvedAccountName("");
+    }
+  }, [accountNumber, selectedBankCode]);
+
+  const handleSaveBankAccount = async () => {
+    if (!selectedBankCode || !accountNumber || !resolvedAccountName) return;
+    setSavingBankAccount(true);
+    setError(null);
+    setSuccessMsg(null);
+    const selectedBank = banks.find(b => b.code === selectedBankCode);
+    const bankName = selectedBank ? selectedBank.name : "";
+    try {
+      const res = await apiFetch("/drivers/me/bank-account", {
+        method: "PUT",
+        json: {
+          bank_code: selectedBankCode,
+          bank_name: bankName,
+          account_number: accountNumber,
+          account_name: resolvedAccountName
+        }
+      });
+      if (res?.success) {
+        setSuccessMsg("Bank account details saved successfully.");
+        setDriver(res.data);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to save bank details.");
+    } finally {
+      setSavingBankAccount(false);
+    }
+  };
 
   const simulateSmallMovement = async () => {
     const latDelta = (Math.random() - 0.5) * 0.001;
@@ -425,6 +537,7 @@ export default function DriverDashboardPage() {
   const tabs = [
     { label: "Overview", icon: <Layers size={16} />, value: "overview" },
     { label: "Deliveries", icon: <FileText size={16} />, value: "deliveries" },
+    { label: "Earnings", icon: <Wallet size={16} />, value: "earnings" },
     { label: "Vehicle Status", icon: <Truck size={16} />, value: "vehicle" },
     { label: "GPS Telemetry", icon: <Compass size={16} />, value: "telemetry" },
     { label: "My Profile", icon: <UserIcon size={16} />, value: "profile" }
@@ -464,6 +577,10 @@ export default function DriverDashboardPage() {
           {/* TAB 1: OVERVIEW */}
           {activeTab === "overview" && (
             <div className="space-y-6">
+              <div>
+                <h1 className="md:text-3xl font-bold text-slate-800">Welcome back, Driver {user?.first_name}</h1>
+                <p className="text-sm text-slate-500">Manage your active dispatch availability, review registered vehicle details, and view quick telemetry logs</p>
+              </div>
               
               {/* Active Vehicle Prompt */}
               {tanker && tanker.status === "ACTIVE" && driver && driver.tanker_id !== tanker.id && (
@@ -573,7 +690,7 @@ export default function DriverDashboardPage() {
               )}
 
               {/* Quick Info Summary Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
                   <h4 className="font-extrabold text-slate-800 text-base mb-3 flex items-center gap-1.5 border-b border-slate-150 pb-2">
                     <Truck size={16} className="text-primary" />
@@ -625,6 +742,28 @@ export default function DriverDashboardPage() {
                     <p className="text-xs text-slate-400 italic">No driver telemetry loaded.</p>
                   )}
                 </div>
+
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <h4 className="font-extrabold text-slate-800 text-base mb-3 flex items-center gap-1.5 border-b border-slate-150 pb-2">
+                      <Wallet className="text-primary" size={16} />
+                      Total Earnings
+                    </h4>
+                    <div className="mt-4">
+                      <span className="text-slate-400 text-xs font-bold block uppercase tracking-wide">Payout Balance</span>
+                      <span className="text-3xl font-black text-slate-900 block mt-1">
+                        ₦{earningsData?.total_earnings?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab("earnings")}
+                    className="mt-6 w-full py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
+                  >
+                    View Earning Logs
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
               </div>
 
             </div>
@@ -632,7 +771,12 @@ export default function DriverDashboardPage() {
 
           {/* TAB 1.5: DELIVERIES */}
           {activeTab === "deliveries" && (
-            <div className="space-y-8 animate-fade-in">
+            <div className="space-y-6 animate-fade-in">
+              <div>
+                <h1 className="md:text-3xl font-bold text-slate-800">Deliveries & Order Inbox</h1>
+                <p className="text-sm text-slate-500">Accept incoming water order requests, update your shipment journey status, and navigate to client destinations</p>
+              </div>
+
               {/* Active Tasks Section */}
               <div className="space-y-4">
                 <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -681,12 +825,135 @@ export default function DriverDashboardPage() {
                             <span>Earnings Payout:</span>
                             <span className="font-black text-[#2f43ff]">₦ {order.price.toLocaleString()}</span>
                           </div>
+                          <div className="flex justify-between">
+                            <span>Payment Status:</span>
+                            <span className={`font-black uppercase text-[10px] px-2 py-0.5 rounded-full ${
+                              order.payment_status === "SUCCESSFUL"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                                : order.payment_status === "FAILED"
+                                ? "bg-rose-50 text-rose-700 border border-rose-100"
+                                : "bg-amber-50 text-amber-700 border border-amber-100"
+                            }`}>
+                              {order.payment_status || "PENDING"}
+                            </span>
+                          </div>
                           {order.scheduled_at && (
                             <div className="flex justify-between text-amber-600 font-medium">
                               <span>Scheduled For:</span>
                               <span>{new Date(order.scheduled_at).toLocaleString()}</span>
                             </div>
                           )}
+
+                          {/* ── Customer GPS Location Panel (all statuses) ── */}
+                          {order.latitude !== null && order.longitude !== null && (
+                            <div className="mt-3 border-t border-slate-100 pt-3 space-y-2">
+                              <span className="flex items-center gap-1 text-[10px] font-black text-slate-400 uppercase tracking-wide">
+                                <Crosshair size={12} className="text-rose-500" />
+                                Customer GPS Location
+                              </span>
+                              {/* Coordinate badge row */}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-900 text-white rounded-lg text-[10px] font-black tracking-wide">
+                                  <Globe size={10} className="text-sky-400" />
+                                  {order.latitude.toFixed(5)},&nbsp;{order.longitude.toFixed(5)}
+                                </span>
+                                <a
+                                  href={`https://www.google.com/maps?q=${order.latitude},${order.longitude}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-[10px] font-black hover:bg-blue-100 transition-colors"
+                                >
+                                  <MapPin size={10} />
+                                  Open in Maps
+                                </a>
+                              </div>
+                              {/* Address text */}
+                              <p className="text-[11px] text-slate-600 font-semibold leading-snug bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
+                                📍 {order.delivery_address}
+                              </p>
+                              {/* Mini-map pin (always visible) */}
+                              <MapComponent
+                                height="160px"
+                                zoom={14}
+                                markers={[{
+                                  id: "customer-loc",
+                                  latitude: order.latitude,
+                                  longitude: order.longitude,
+                                  title: "Customer Location",
+                                  iconType: "customer",
+                                  popupText: order.delivery_address
+                                }]}
+                              />
+                            </div>
+                          )}
+                          {/* ── Full Route Navigation Map (accepted / in-progress orders) ── */}
+                          {order.status !== "PENDING" && (() => {
+                            const sourceId = order.source_id || tanker?.default_source_id;
+                            const source = sources.find(s => s.id === sourceId);
+                            const driverMarkers: any[] = [];
+                            
+                            const dLat = driver?.latitude;
+                            const dLng = driver?.longitude;
+                            if (driver && dLat !== null && dLat !== undefined && dLng !== null && dLng !== undefined) {
+                              driverMarkers.push({
+                                id: "driver",
+                                latitude: dLat,
+                                longitude: dLng,
+                                title: "Your Location",
+                                iconType: "driver",
+                                popupText: "Simulated live coordinates"
+                              });
+                            }
+                            
+                            const sLat = source?.latitude;
+                            const sLng = source?.longitude;
+                            if (source && sLat !== null && sLat !== undefined && sLng !== null && sLng !== undefined) {
+                              driverMarkers.push({
+                                id: "source",
+                                latitude: sLat,
+                                longitude: sLng,
+                                title: source.name || "Source Depot",
+                                iconType: "source",
+                                popupText: source.verification_status
+                              });
+                            }
+                            if (order.latitude !== null && order.longitude !== null) {
+                              driverMarkers.push({
+                                id: "customer",
+                                latitude: order.latitude,
+                                longitude: order.longitude,
+                                title: "Delivery Destination",
+                                iconType: "customer",
+                                popupText: order.delivery_address
+                              });
+                            }
+
+                            const driverAutoRoute = {
+                              driver: (driver && driver.latitude !== null && driver.longitude !== null)
+                                ? { latitude: driver.latitude, longitude: driver.longitude }
+                                : null,
+                              source: (source && source.latitude !== null && source.longitude !== null)
+                                ? { latitude: source.latitude, longitude: source.longitude }
+                                : null,
+                              customer: order.latitude !== null && order.longitude !== null
+                                ? { latitude: order.latitude, longitude: order.longitude }
+                                : null
+                            };
+
+                            return (
+                              <div className="mt-4 border-t border-slate-100 pt-3">
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                                  <Navigation size={12} className="text-primary animate-pulse" />
+                                  Active Route Navigation
+                                </span>
+                                <MapComponent
+                                  height="180px"
+                                  markers={driverMarkers}
+                                  autoRouteFromDriverToSourceToCustomer={driverAutoRoute}
+                                />
+                              </div>
+                            );
+                          })()}
                         </div>
 
                         <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
@@ -695,7 +962,7 @@ export default function DriverDashboardPage() {
                               <button
                                 onClick={() => handleUpdateOrderStatus(order.id, "ACCEPTED")}
                                 disabled={updatingOrderStatus === order.id}
-                                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-sm flex items-center justify-center gap-1"
+                                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-sm flex items-center justify-center gap-1 active:scale-95"
                               >
                                 Accept Order
                               </button>
@@ -859,9 +1126,129 @@ export default function DriverDashboardPage() {
             </div>
           )}
 
+          {/* TAB 1.7: EARNINGS */}
+          {activeTab === "earnings" && earningsData && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="md:text-3xl font-bold text-slate-800">Earnings Ledger</h1>
+                  <p className="text-sm text-slate-500">Track your completed distribution payout balance, view transaction history logs, and manage Paystack payouts</p>
+                </div>
+                <button
+                  onClick={fetchDashboardData}
+                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5"
+                >
+                  <RefreshCw size={14} />
+                  Refresh Ledger
+                </button>
+              </div>
+
+              {/* Earnings Overview Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                <div className="bg-[#2f43ff] text-white rounded-3xl p-6 shadow-lg relative overflow-hidden">
+                  <div className="absolute right-0 bottom-0 translate-x-4 translate-y-4 opacity-10">
+                    <Wallet size={120} />
+                  </div>
+                  <span className="text-white/70 text-[10px] font-black uppercase tracking-wider">Total Revenue Earned</span>
+                  <span className="text-3xl font-black block mt-2">
+                    ₦{earningsData.total_earnings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <p className="text-[10px] text-white/60 mt-3 font-semibold">Accumulated from {earningsData.earnings_logs.length} paid deliveries</p>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <span className="text-slate-400 text-[10px] font-black uppercase tracking-wider">Completed Deliveries</span>
+                    <span className="text-3xl font-black text-slate-950 block mt-2">
+                      {earningsData.earnings_logs.length}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-3 font-medium">Only successfully completed & confirmed orders generate earnings.</p>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <span className="text-slate-400 text-[10px] font-black uppercase tracking-wider">Average Per Delivery</span>
+                    <span className="text-3xl font-black text-slate-950 block mt-2">
+                      ₦{(earningsData.earnings_logs.length > 0 
+                        ? earningsData.total_earnings / earningsData.earnings_logs.length 
+                        : 0
+                      ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-3 font-medium">Calculated across your entire dispatch history.</p>
+                </div>
+              </div>
+
+              {/* Earnings Logs Table */}
+              <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+                <div className="px-6 py-5 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between">
+                  <h4 className="font-extrabold text-slate-800 text-sm">Disbursement Log Ledger</h4>
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded bg-[#2f43ff]/10 text-[#2f43ff]">
+                    Paystack Instant Payouts
+                  </span>
+                </div>
+
+                {earningsData.earnings_logs.length === 0 ? (
+                  <div className="px-6 py-16 text-center text-slate-400">
+                    <Wallet size={36} className="mx-auto stroke-slate-350 mb-3" />
+                    <p className="text-sm font-semibold">No earnings transactions logged yet.</p>
+                    <p className="text-xs text-slate-400 mt-1">Once a customer processes pay-after-service for a completed delivery, the transaction will appear here.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          <th className="py-4 px-6">Date & Time</th>
+                          <th className="py-4 px-6">Payment Reference</th>
+                          <th className="py-4 px-6">Client / Customer</th>
+                          <th className="py-4 px-6">Details</th>
+                          <th className="py-4 px-6 text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                        {earningsData.earnings_logs.map((log: any) => (
+                          <tr key={log.payment_id} className="hover:bg-slate-50/50">
+                            <td className="py-4 px-6 text-slate-500">
+                              {new Date(log.timestamp).toLocaleDateString(undefined, { 
+                                year: "numeric", 
+                                month: "short", 
+                                day: "numeric" 
+                              })} at {new Date(log.timestamp).toLocaleTimeString(undefined, {
+                                hour: "2-digit",
+                                minute: "2-digit"
+                              })}
+                            </td>
+                            <td className="py-4 px-6 font-mono text-slate-800 font-bold uppercase">{log.payment_reference}</td>
+                            <td className="py-4 px-6 text-slate-900 font-extrabold">{log.customer_name}</td>
+                            <td className="py-4 px-6">
+                              <div className="flex flex-col">
+                                <span className="font-bold text-slate-800">{log.water_type} Water</span>
+                                <span className="text-[10px] text-slate-400 font-normal">{log.quantity_litres.toLocaleString()} Litres</span>
+                              </div>
+                            </td>
+                            <td className="py-4 px-6 text-right text-base font-black text-emerald-600">
+                              +₦{log.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* TAB 2: VEHICLE MANAGEMENT */}
           {activeTab === "vehicle" && (
-            <>
+            <div className="space-y-6">
+              <div>
+                <h1 className="md:text-3xl font-bold text-slate-800">Vehicle Status & Registration</h1>
+                <p className="text-sm text-slate-500">Manage your tanker details, upload license documents, and view drinking water supply eligibility status</p>
+              </div>
+
               {showRegForm ? (
                 <div className="bg-white border border-slate-200 rounded-3xl p-8 max-w-2xl mx-auto shadow-md">
                   <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
@@ -1077,168 +1464,292 @@ export default function DriverDashboardPage() {
                   </div>
                 )
               )}
-            </>
+            </div>
           )}
 
           {/* TAB 3: GPS TELEMETRY */}
           {activeTab === "telemetry" && (
-            driver && driver.tanker_id ? (
-              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-md space-y-6">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                    <Compass size={18} className="text-primary" />
-                    GPS Telemetry Simulation
-                  </h3>
-                  {telemetrySyncActive && (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-primary-light text-primary animate-pulse">
-                      <Navigation size={8} className="animate-spin" />
-                      Auto-Sync Active (30s)
-                    </span>
-                  )}
-                </div>
+            <div className="space-y-6">
+              <div>
+                <h1 className="md:text-3xl font-bold text-slate-800">GPS Telemetry Simulation</h1>
+                <p className="text-sm text-slate-500">Broadcast your simulated coordinates to customers, choose landmarks in Enugu, and manage active sync status</p>
+              </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Live Telemetry coordinates */}
-                  <div className="space-y-4">
-                    <div className="bg-slate-50 border border-slate-150 rounded-2xl p-4">
-                      <span className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">Current Broadcast Location</span>
-                      <div className="mt-2 flex items-center justify-between">
-                        <div>
-                          <span className="text-xs font-semibold text-slate-400 block">Latitude</span>
-                          <span className="text-lg font-black text-slate-800">{driver.latitude?.toFixed(6) || "None"}</span>
-                        </div>
-                        <div>
-                          <span className="text-xs font-semibold text-slate-400 block">Longitude</span>
-                          <span className="text-lg font-black text-slate-800">{driver.longitude?.toFixed(6) || "None"}</span>
-                        </div>
-                      </div>
-                      <span className="block text-[9px] text-slate-450 mt-3 flex items-center gap-1">
-                        <RefreshCw size={10} />
-                        Last updated: {driver.last_location_update ? new Date(driver.last_location_update).toLocaleTimeString() : "Never"}
+              {driver && driver.tanker_id ? (
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-md space-y-6">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                      <Compass size={18} className="text-primary" />
+                      GPS Telemetry Control Panel
+                    </h3>
+                    {telemetrySyncActive && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-primary-light text-primary animate-pulse">
+                        <Navigation size={8} className="animate-spin" />
+                        Auto-Sync Active (30s)
                       </span>
-                    </div>
-
-                    {/* Presets Select Dropdown */}
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-slate-500 tracking-wider uppercase">
-                        Simulate Preset Landmark (Enugu)
-                      </label>
-                      <select
-                        onChange={(e) => handlePresetSelect(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
-                      >
-                        <option value="">-- Choose Preset Location --</option>
-                        {ENUGU_PRESETS.map((preset, index) => (
-                          <option key={preset.name} value={index}>
-                            {preset.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    )}
                   </div>
 
-                  {/* Manual Telemetry Controls */}
-                  <div className="space-y-4 flex flex-col justify-between">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-bold text-slate-500 tracking-wider uppercase">Latitude</label>
-                        <input
-                          type="number"
-                          step="0.000001"
-                          value={simLat}
-                          onChange={(e) => setSimLat(parseFloat(e.target.value))}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none"
-                        />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Live Telemetry coordinates */}
+                    <div className="space-y-4">
+                      <div className="bg-slate-50 border border-slate-150 rounded-2xl p-4">
+                        <span className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">Current Broadcast Location</span>
+                        <div className="mt-2 flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-semibold text-slate-400 block">Latitude</span>
+                            <span className="text-lg font-black text-slate-800">{driver.latitude?.toFixed(6) || "None"}</span>
+                          </div>
+                          <div>
+                            <span className="text-xs font-semibold text-slate-400 block">Longitude</span>
+                            <span className="text-lg font-black text-slate-800">{driver.longitude?.toFixed(6) || "None"}</span>
+                          </div>
+                        </div>
+                        <span className="block text-[9px] text-slate-455 mt-3 flex items-center gap-1">
+                          <RefreshCw size={10} />
+                          Last updated: {driver.last_location_update ? new Date(driver.last_location_update).toLocaleTimeString() : "Never"}
+                        </span>
                       </div>
+
+                      {/* Presets Select Dropdown */}
                       <div className="space-y-1.5">
-                        <label className="block text-xs font-bold text-slate-500 tracking-wider uppercase">Longitude</label>
-                        <input
-                          type="number"
-                          step="0.000001"
-                          value={simLng}
-                          onChange={(e) => setSimLng(parseFloat(e.target.value))}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none"
-                        />
+                        <label className="block text-xs font-bold text-slate-500 tracking-wider uppercase">
+                          Simulate Preset Landmark (Enugu)
+                        </label>
+                        <select
+                          onChange={(e) => handlePresetSelect(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
+                        >
+                          <option value="">-- Choose Preset Location --</option>
+                          {ENUGU_PRESETS.map((preset, index) => (
+                            <option key={preset.name} value={index}>
+                              {preset.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
 
-                    <div className="flex gap-3 mt-4">
-                      <button
-                        type="button"
-                        onClick={handleDetectGPS}
-                        className="flex-1 py-3 border border-slate-250 text-slate-700 bg-white hover:bg-slate-50 font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5"
-                      >
-                        <MapPin size={14} className="text-slate-400" />
-                        Detect GPS
-                      </button>
-                      <button
-                        type="button"
-                        disabled={updatingLocation}
-                        onClick={handleUpdateLocation}
-                        className="flex-1 py-3 bg-primary hover:bg-primary-hover text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5"
-                      >
-                        {updatingLocation ? (
-                          <div className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
-                        ) : (
-                          <>
-                            <Navigation size={14} />
-                            Sync GPS
-                          </>
-                        )}
-                      </button>
+                    {/* Manual Telemetry Controls */}
+                    <div className="space-y-4 flex flex-col justify-between">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-slate-500 tracking-wider uppercase">Latitude</label>
+                          <input
+                            type="number"
+                            step="0.000001"
+                            value={simLat}
+                            onChange={(e) => setSimLat(parseFloat(e.target.value))}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-slate-500 tracking-wider uppercase">Longitude</label>
+                          <input
+                            type="number"
+                            step="0.000001"
+                            value={simLng}
+                            onChange={(e) => setSimLng(parseFloat(e.target.value))}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3 mt-4">
+                        <button
+                          type="button"
+                          onClick={handleDetectGPS}
+                          className="flex-1 py-3 border border-slate-250 text-slate-700 bg-white hover:bg-slate-50 font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5"
+                        >
+                          <MapPin size={14} className="text-slate-400" />
+                          Detect GPS
+                        </button>
+                        <button
+                          type="button"
+                          disabled={updatingLocation}
+                          onClick={handleUpdateLocation}
+                          className="flex-1 py-3 bg-primary hover:bg-primary-hover text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5"
+                        >
+                          {updatingLocation ? (
+                            <div className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
+                          ) : (
+                            <>
+                              <Navigation size={14} />
+                              Sync GPS
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className="bg-white border border-slate-200 rounded-3xl p-6 text-center text-slate-400 shadow-sm max-w-md mx-auto">
-                <Info size={24} className="mx-auto text-slate-350 mb-2" />
-                <p className="text-xs font-semibold">Assign an approved tanker vehicle on the "Vehicle Status" tab to configure GPS telemetry sync settings.</p>
-              </div>
-            )
+              ) : (
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 text-center text-slate-400 shadow-sm max-w-md mx-auto">
+                  <Info size={24} className="mx-auto text-slate-350 mb-2" />
+                  <p className="text-xs font-semibold">Assign an approved tanker vehicle on the "Vehicle Status" tab to configure GPS telemetry sync settings.</p>
+                </div>
+              )}
+            </div>
           )}
 
           {/* TAB 4: PROFILE */}
           {activeTab === "profile" && (
-            <div className="bg-white border border-slate-200 rounded-3xl p-8 max-w-xl mx-auto shadow-md">
-              <div className="flex items-center gap-4 border-b border-slate-100 pb-5 mb-5">
-                <div className="h-14 w-14 rounded-2xl bg-[#2f43ff] text-white flex items-center justify-center">
-                  <UserIcon size={28} />
-                </div>
-                <div>
-                  <h3 className="text-xl font-black text-slate-900">{user?.first_name} {user?.last_name}</h3>
-                  <span className="text-xs font-bold text-gray-650 tracking-wide uppercase">{user?.role} Profile</span>
-                </div>
-              </div>
+            <div className="space-y-6 animate-fade-in">
+              <h1 className="md:text-3xl font-bold text-slate-800">Driver Profile</h1>
+              <p className="text-sm text-slate-500">Manage your account details, security credentials, and payout bank account details</p>
 
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <span className="block text-[10px] font-bold text-slate-400 uppercase">First Name</span>
-                    <span className="text-sm font-bold text-slate-800">{user?.first_name}</span>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                {/* Left Column: Driver Summary Card */}
+                <div className="lg:col-span-1 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col items-center text-center">
+                  {/* Avatar */}
+                  <div className="h-24 w-24 rounded-full bg-blue-50 text-[#2f43ff] flex items-center justify-center border-2 border-blue-200 mb-4 shadow-inner">
+                    <UserIcon size={48} className="stroke-[1.5]" />
                   </div>
-                  <div>
-                    <span className="block text-[10px] font-bold text-slate-400 uppercase">Last Name</span>
-                    <span className="text-sm font-bold text-slate-800">{user?.last_name}</span>
-                  </div>
-                </div>
-
-                <div>
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Email Address</span>
-                  <span className="text-sm font-bold text-slate-800">{user?.email}</span>
-                </div>
-
-                <div>
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Phone Number</span>
-                  <span className="text-sm font-bold text-slate-800">{user?.phone}</span>
-                </div>
-
-                <div>
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Account Status</span>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 mt-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <CheckCircle size={12} />
-                    Active Account
+                  <h3 className="text-lg font-black text-slate-900">{user?.first_name} {user?.last_name}</h3>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 mt-2 rounded-full text-[10px] font-black tracking-wide bg-blue-50 text-blue-700 border border-blue-200 uppercase">
+                    {user?.role} Account
                   </span>
+
+                  <div className="w-full border-t border-slate-100 pt-4 mt-4 space-y-2 text-xs font-medium text-slate-500">
+                    <div className="flex justify-between">
+                      <span>Operator Status</span>
+                      <span className={`font-extrabold flex items-center gap-1 ${
+                        driver?.status === "AVAILABLE" ? "text-emerald-600" : "text-slate-500"
+                      }`}>
+                        <CheckCircle size={12} /> {driver?.status || "OFFLINE"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Member Since</span>
+                      <span className="text-slate-800 font-bold">June 2026</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Middle/Right Columns: Details & Bank Details Cards */}
+                <div className="lg:col-span-2 space-y-6">
+                  {/* Contact details */}
+                  <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
+                    <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-1.5 border-b border-slate-100 pb-3 uppercase tracking-wider">
+                      <UserIcon size={16} className="text-[#2f43ff]" />
+                      Personal Details
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
+                        <span className="block text-[10px] font-bold text-slate-400 uppercase">First Name</span>
+                        <span className="text-sm font-bold text-slate-800">{user?.first_name}</span>
+                      </div>
+                      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
+                        <span className="block text-[10px] font-bold text-slate-400 uppercase">Last Name</span>
+                        <span className="text-sm font-bold text-slate-800">{user?.last_name}</span>
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
+                      <span className="block text-[10px] font-bold text-slate-400 uppercase">Email Address</span>
+                      <span className="text-sm font-bold text-slate-800">{user?.email}</span>
+                    </div>
+                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
+                      <span className="block text-[10px] font-bold text-slate-400 uppercase">Phone Number</span>
+                      <span className="text-sm font-bold text-slate-800">{user?.phone}</span>
+                    </div>
+                  </div>
+
+                  {/* Bank Details Card */}
+                  <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
+                    <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-1.5 border-b border-slate-100 pb-3 uppercase tracking-wider">
+                      <Wallet size={16} className="text-[#2f43ff]" />
+                      Payout Bank Account
+                    </h4>
+
+                    {/* Feedback Messages inside the form */}
+                    {error && (
+                      <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 text-[11px] font-semibold text-rose-700 flex items-center gap-2 animate-fade-in">
+                        <AlertCircle size={14} className="shrink-0 text-rose-600" />
+                        <span>{error}</span>
+                      </div>
+                    )}
+
+                    {successMsg && (
+                      <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-[11px] font-semibold text-emerald-700 flex items-center gap-2 animate-fade-in">
+                        <CheckCircle size={14} className="shrink-0 text-emerald-600" />
+                        <span>{successMsg}</span>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Bank Select Dropdown */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase">Select Bank</label>
+                        {loadingBanks ? (
+                          <div className="h-10 bg-slate-50 border border-slate-200 rounded-xl animate-pulse flex items-center px-3 text-xs text-slate-400">
+                            Loading banks list...
+                          </div>
+                        ) : (
+                          <select
+                            value={selectedBankCode}
+                            onChange={(e) => setSelectedBankCode(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold focus:outline-none focus:border-primary transition-all"
+                          >
+                            <option value="">-- Choose Bank --</option>
+                            {banks.map((b) => (
+                              <option key={b.code} value={b.code}>
+                                {b.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+
+                      {/* Account Number Input */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase">Account Number</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            maxLength={10}
+                            value={accountNumber}
+                            onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))}
+                            placeholder="10-digit NUBAN"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold focus:outline-none focus:border-primary transition-all"
+                          />
+                          {resolvingAccount && (
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Account Name resolution result display */}
+                    {resolvedAccountName && (
+                      <div className="bg-emerald-50/60 border border-emerald-100 rounded-xl p-3 flex items-center justify-between text-xs font-semibold animate-fade-in">
+                        <div className="space-y-0.5">
+                          <span className="block text-[8px] font-bold text-emerald-600 uppercase tracking-wide">Account Name Verified</span>
+                          <span className="text-emerald-800 font-extrabold">{resolvedAccountName}</span>
+                        </div>
+                        <CheckCircle size={16} className="text-emerald-600 shrink-0" />
+                      </div>
+                    )}
+
+                    {/* Save bank details button */}
+                    <button
+                      type="button"
+                      onClick={handleSaveBankAccount}
+                      disabled={savingBankAccount || !selectedBankCode || accountNumber.length !== 10 || !resolvedAccountName}
+                      className="w-full py-3 bg-primary hover:bg-primary-hover text-white text-xs font-black rounded-xl transition-all shadow-md active:scale-95 disabled:bg-slate-100 disabled:text-slate-400 disabled:pointer-events-none flex items-center justify-center gap-1.5"
+                    >
+                      {savingBankAccount ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />
+                      ) : (
+                        <>
+                          <Wallet size={14} />
+                          <span>Save Bank Details</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

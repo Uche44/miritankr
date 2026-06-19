@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     # Defaulting to an async SQLite fallback for testing, but PostgreSQL is the system of record
     DATABASE_URL: str = "sqlite+aiosqlite:///./miritankr.db"
 
+    # Paystack configuration
+    PAYSTACK_SECRET_KEY: str = ""
+    PAYSTACK_PUBLIC_KEY: str = ""
+
     class Config:
         case_sensitive = True
         env_file = ".env"

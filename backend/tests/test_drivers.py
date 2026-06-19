@@ -173,3 +173,67 @@ async def test_drivers_workflow():
         assert driver_in_list["tanker"]["plate_number"] == "ENU-777-BB"
         assert driver_in_list["tanker"]["capacity_litres"] == 12000
         assert driver_in_list["user"]["first_name"] == "Chinedu"
+
+@pytest.mark.asyncio
+async def test_driver_bank_account_workflow():
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        # 1. Register a Driver
+        driver_reg = {
+            "email": "driver_bank@example.com",
+            "password": "password123",
+            "first_name": "BankDriver",
+            "last_name": "Test",
+            "phone": "+2348044445501",
+            "role": "DRIVER"
+        }
+        res_driver = await ac.post("/api/v1/auth/register", json=driver_reg)
+        assert res_driver.status_code == 201
+        driver_token = res_driver.json()["access_token"]
+
+        # 2. Get list of banks
+        res_banks = await ac.get(
+            "/api/v1/payments/banks",
+            headers={"Authorization": f"Bearer {driver_token}"}
+        )
+        assert res_banks.status_code == 200
+        banks = res_banks.json()["data"]
+        assert len(banks) > 0
+        assert "name" in banks[0]
+        assert "code" in banks[0]
+
+        # 3. Resolve account details (mock resolved)
+        res_resolve = await ac.get(
+            "/api/v1/payments/resolve-account?account_number=0001234567&bank_code=058",
+            headers={"Authorization": f"Bearer {driver_token}"}
+        )
+        assert res_resolve.status_code == 200
+        resolved = res_resolve.json()["data"]
+        assert resolved["account_name"] == "MOCK VERIFIED ACCOUNT"
+
+        # 4. Save bank account details
+        bank_payload = {
+            "bank_code": "058",
+            "bank_name": "Guaranty Trust Bank",
+            "account_number": "0001234567",
+            "account_name": "MOCK VERIFIED ACCOUNT"
+        }
+        res_save = await ac.put(
+            "/api/v1/drivers/me/bank-account",
+            json=bank_payload,
+            headers={"Authorization": f"Bearer {driver_token}"}
+        )
+        assert res_save.status_code == 200
+        saved_data = res_save.json()["data"]
+        assert saved_data["bank_code"] == "058"
+        assert saved_data["bank_name"] == "Guaranty Trust Bank"
+        assert saved_data["account_number"] == "0001234567"
+        assert saved_data["account_name"] == "MOCK VERIFIED ACCOUNT"
+
+        # 5. Fetch profile again to verify persistence
+        res_me = await ac.get(
+            "/api/v1/drivers/me",
+            headers={"Authorization": f"Bearer {driver_token}"}
+        )
+        assert res_me.status_code == 200
+        assert res_me.json()["data"]["bank_code"] == "058"
+

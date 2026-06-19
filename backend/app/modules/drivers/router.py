@@ -11,7 +11,9 @@ from app.modules.drivers.schemas import (
     DriverTankerUpdate,
     DriverEnvelope,
     DriverDetailEnvelope,
-    DriverListEnvelope
+    DriverListEnvelope,
+    DriverEarningsEnvelope,
+    DriverBankAccountUpdate
 )
 from app.modules.drivers.service import driver_service
 
@@ -97,3 +99,36 @@ async def list_active_drivers(
         message="Active available drivers list retrieved successfully",
         data=response_list
     )
+
+@router.get("/drivers/me/earnings", response_model=DriverEarningsEnvelope, tags=["Drivers"])
+async def get_my_earnings(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(RoleChecker(allowed_roles=["DRIVER"]))
+):
+    """
+    Retrieve payout logs and total earnings summary for the current driver.
+    """
+    earnings_data = await driver_service.get_driver_earnings(db, current_user.id)
+    return DriverEarningsEnvelope(
+        success=True,
+        message="Driver earnings retrieved successfully",
+        data=earnings_data
+    )
+
+@router.put("/drivers/me/bank-account", response_model=DriverDetailEnvelope, tags=["Drivers"])
+async def update_driver_bank_account(
+    payload: DriverBankAccountUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(RoleChecker(allowed_roles=["DRIVER"]))
+):
+    """
+    Update the driver's payout bank account details (verified via Paystack).
+    """
+    driver = await driver_service.update_bank_account(db, current_user.id, payload)
+    response_data = await driver_service.build_detail_response(db, driver)
+    return DriverDetailEnvelope(
+        success=True,
+        message="Driver bank account updated successfully",
+        data=response_data
+    )
+

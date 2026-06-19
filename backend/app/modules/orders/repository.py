@@ -2,6 +2,7 @@ import uuid
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from app.modules.orders.models import Order
 from app.modules.orders.schemas import OrderCreate
 
@@ -12,7 +13,7 @@ class OrderRepository:
         Retrieve a specific order by ID.
         """
         result = await db.execute(
-            select(Order).where(Order.id == order_id)
+            select(Order).where(Order.id == order_id).options(selectinload(Order.payments))
         )
         return result.scalars().first()
 
@@ -21,7 +22,7 @@ class OrderRepository:
         Retrieve all orders placed by a customer.
         """
         result = await db.execute(
-            select(Order).where(Order.customer_id == customer_id).order_by(Order.created_at.desc())
+            select(Order).where(Order.customer_id == customer_id).options(selectinload(Order.payments)).order_by(Order.created_at.desc())
         )
         return list(result.scalars().all())
 
@@ -30,7 +31,7 @@ class OrderRepository:
         Retrieve all orders assigned to (or requested from) a driver.
         """
         result = await db.execute(
-            select(Order).where(Order.assigned_driver_id == driver_id).order_by(Order.created_at.desc())
+            select(Order).where(Order.assigned_driver_id == driver_id).options(selectinload(Order.payments)).order_by(Order.created_at.desc())
         )
         return list(result.scalars().all())
 
@@ -42,7 +43,7 @@ class OrderRepository:
             select(Order).where(
                 Order.assigned_driver_id == driver_id,
                 Order.status == "PENDING"
-            ).order_by(Order.created_at.asc())
+            ).options(selectinload(Order.payments)).order_by(Order.created_at.asc())
         )
         return list(result.scalars().all())
 
@@ -51,7 +52,7 @@ class OrderRepository:
         Retrieve all orders in the system (Admin view).
         """
         result = await db.execute(
-            select(Order).order_by(Order.created_at.desc())
+            select(Order).options(selectinload(Order.payments)).order_by(Order.created_at.desc())
         )
         return list(result.scalars().all())
 
@@ -60,7 +61,7 @@ class OrderRepository:
         Retrieve all PENDING orders in the system (Admin oversight view).
         """
         result = await db.execute(
-            select(Order).where(Order.status == "PENDING").order_by(Order.created_at.asc())
+            select(Order).where(Order.status == "PENDING").options(selectinload(Order.payments)).order_by(Order.created_at.asc())
         )
         return list(result.scalars().all())
 

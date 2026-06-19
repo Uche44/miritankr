@@ -2,16 +2,17 @@
 
 import React, { useState, useEffect } from "react";
 import DashboardLayout from "../../../components/dashboard/dashboard-layout";
+import MapComponent from "../../../components/map/map-component";
 import { apiFetch } from "../../../lib/api-client";
 import { useAuthSession } from "../../../hooks/use-auth-session";
-import { 
-  ShieldAlert, 
-  CheckCircle2, 
-  XCircle, 
+import {
+  ShieldAlert,
+  CheckCircle2,
+  XCircle,
   AlertTriangle,
-  FileSpreadsheet, 
-  Truck, 
-  Compass, 
+  FileSpreadsheet,
+  Truck,
+  Compass,
   User as UserIcon,
   Search,
   Droplet,
@@ -21,7 +22,10 @@ import {
   TrendingUp,
   Calendar,
   Sliders,
-  MapPin
+  MapPin,
+  ShieldCheck,
+  Activity,
+  RefreshCw
 } from "lucide-react";
 
 interface WaterSource {
@@ -89,6 +93,70 @@ export default function AdminDashboardPage() {
   // Tanker status updating states
   const [updatingTankerId, setUpdatingTankerId] = useState<string | null>(null);
   const [newTankerStatus, setNewTankerStatus] = useState<string>("");
+
+  // Audit & Metrics states
+  const [metrics, setMetrics] = useState<any>(null);
+  const [safetyLogs, setSafetyLogs] = useState<any[]>([]);
+  const [loadingAudit, setLoadingAudit] = useState(false);
+  const [boreholeGrades, setBoreholeGrades] = useState<Record<string, string>>({});
+  const [activeDrivers, setActiveDrivers] = useState<any[]>([]);
+
+  const fetchAuditData = async () => {
+    setLoadingAudit(true);
+    try {
+      const metricsRes = await apiFetch("/admin/metrics");
+      if (metricsRes?.success) {
+        setMetrics(metricsRes.data);
+      }
+      const logsRes = await apiFetch("/admin/quality-reports");
+      if (logsRes?.success) {
+        setSafetyLogs(logsRes.data);
+      }
+      const driversRes = await apiFetch("/drivers/active");
+      if (driversRes?.success) {
+        setActiveDrivers(driversRes.data);
+      }
+    } catch (err: any) {
+      console.error("Failed to load audit data:", err);
+    } finally {
+      setLoadingAudit(false);
+    }
+  };
+
+  const handleVerifyBoreholeDirect = async (sourceId: string, status: string, grade: string | null) => {
+    setError(null);
+    setSuccess(null);
+    setUpdatingSourceId(sourceId);
+    try {
+      const payload = {
+        verification_status: status,
+        quality_grade: status === "VERIFIED" ? (grade || "B") : null
+      };
+
+      const res = await apiFetch(`/admin/water-sources/${sourceId}/verify`, {
+        method: "PUT",
+        json: payload
+      });
+
+      if (res?.success) {
+        setSuccess(`Borehole source "${res.data.name}" updated successfully!`);
+        // Refresh sources list
+        setSources(prev => prev.map(s => s.id === sourceId ? res.data : s));
+        // Refresh audit metrics and safety logs
+        fetchAuditData();
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to update borehole status.");
+    } finally {
+      setUpdatingSourceId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "audit") {
+      fetchAuditData();
+    }
+  }, [activeTab]);
 
   const loadData = async () => {
     setLoading(true);
@@ -222,13 +290,14 @@ export default function AdminDashboardPage() {
     { label: "Overview", icon: <Layers size={16} />, value: "overview" },
     { label: "Water Sources", icon: <Droplet size={16} />, value: "sources" },
     { label: "Tankers Approval", icon: <Truck size={16} />, value: "tankers" },
+    { label: "Audit & Metrics", icon: <ShieldCheck size={16} />, value: "audit" },
     { label: "My Profile", icon: <UserIcon size={16} />, value: "profile" }
   ];
 
   // Filters
   const filteredSources = sources.filter(s => {
-    const matchesSearch = s.name.toLowerCase().includes(sourceSearch.toLowerCase()) || 
-                          s.address.toLowerCase().includes(sourceSearch.toLowerCase());
+    const matchesSearch = s.name.toLowerCase().includes(sourceSearch.toLowerCase()) ||
+      s.address.toLowerCase().includes(sourceSearch.toLowerCase());
     const matchesStatus = sourceFilterStatus ? s.verification_status === sourceFilterStatus : true;
     return matchesSearch && matchesStatus;
   });
@@ -272,8 +341,11 @@ export default function AdminDashboardPage() {
           {/* TAB 1: OVERVIEW */}
           {activeTab === "overview" && (
             <div className="space-y-8">
+              <h1 className="md:text-3xl font-bold text-slate-800">Welcome back, Admin {user?.first_name}</h1>
+              <p className="text-sm text-slate-500">Administrative dashboard for managing tanker activities, ensuring water facility safety and ensuring efficient water distribution in Enugu State</p>
               {/* Stats Cards Row */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+
                 <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex items-center justify-between">
                   <div>
                     <span className="block text-xs font-bold text-gray-650 tracking-wider uppercase">Water Sources</span>
@@ -324,7 +396,7 @@ export default function AdminDashboardPage() {
                 <p className="text-white/80 text-sm mt-2 max-w-2xl">
                   Enugu State enforces strict water source traceability. Check pending borehole certifications and authorize tankers to begin utility or drinking supply deliveries.
                 </p>
-                <button 
+                <button
                   onClick={() => setActiveTab("sources")}
                   className="mt-6 px-6 py-3 bg-white text-[#2f43ff] hover:bg-slate-50 text-xs font-black uppercase tracking-wider rounded-xl shadow-md transition-all active:scale-95"
                 >
@@ -337,10 +409,12 @@ export default function AdminDashboardPage() {
           {/* TAB 2: WATER SOURCES */}
           {activeTab === "sources" && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-              
+
               {/* Left 2 Columns: Sources list */}
               <div className="lg:col-span-2 space-y-4">
-                
+                <h1 className="md:text-3xl font-bold text-slate-800">Water Sources</h1>
+                <p className="text-sm text-slate-500">Authorize, Review and manage available water sources that distribute water in Enugu State</p>
+
                 {/* Search Bar */}
                 <div className="bg-white border border-slate-200 rounded-3xl p-4 shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between">
                   <div className="relative w-full sm:max-w-xs flex items-center">
@@ -383,9 +457,8 @@ export default function AdminDashboardPage() {
                         <div
                           key={source.id}
                           onClick={() => handleSelectSource(source)}
-                          className={`bg-white border rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-4 ${
-                            isSelected ? "border-[#2f43ff] ring-1 ring-[#2f43ff]" : "border-slate-200"
-                          }`}
+                          className={`bg-white border rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-4 ${isSelected ? "border-[#2f43ff] ring-1 ring-[#2f43ff]" : "border-slate-200"
+                            }`}
                         >
                           <div className="space-y-1">
                             <h4 className="font-bold text-slate-900 text-base">{source.name}</h4>
@@ -538,6 +611,10 @@ export default function AdminDashboardPage() {
           {/* TAB 3: TANKERS APPROVAL */}
           {activeTab === "tankers" && (
             <div className="space-y-4">
+
+              <h1 className="md:text-3xl font-bold text-slate-800">Tanker Registration</h1>
+              <p className="text-sm text-slate-500">Manage private and company tanker registration and approvals in Enugu State</p>
+
               {/* Search / filter header */}
               <div className="bg-white border border-slate-200 rounded-3xl p-4 shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between">
                 <div className="relative w-full sm:max-w-xs flex items-center">
@@ -630,10 +707,354 @@ export default function AdminDashboardPage() {
             </div>
           )}
 
+          {/* TAB: AUDIT & METRICS */}
+          {activeTab === "audit" && (
+            <div className="space-y-8">
+              {/* Header with Refresh button */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="md:text-3xl font-bold text-slate-800">Audit & Metrics</h1>
+                  <p className="text-sm text-slate-500">System-wide distributed volumes, real-time water quality testing ledger, and borehole verification requests</p>
+                </div>
+                <button
+                  onClick={fetchAuditData}
+                  disabled={loadingAudit}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
+                >
+                  <RefreshCw size={14} className={loadingAudit ? "animate-spin" : ""} />
+                  {loadingAudit ? "Syncing..." : "Sync Logs"}
+                </button>
+              </div>
+
+              {loadingAudit && !metrics ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                  <p className="text-sm font-semibold text-slate-500">Retrieving audit trails & telemetry data...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Top Analytics Rows */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Volume Analytics Card */}
+                    <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col justify-between lg:col-span-2">
+                      <div>
+                        <span className="block text-xs font-bold text-gray-650 tracking-wider uppercase">System-Wide Volume Distribution</span>
+                        <div className="grid grid-cols-3 gap-4 mt-4 border-b border-slate-100 pb-4">
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Total Distributed</span>
+                            <span className="text-2xl font-black text-slate-900 block mt-1">
+                              {(metrics?.total_volume_litres || 0).toLocaleString()} L
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Drinking (Grade A-C)</span>
+                            <span className="text-2xl font-black text-blue-600 block mt-1">
+                              {(metrics?.drinking_volume_litres || 0).toLocaleString()} L
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Utility (Grade D-F)</span>
+                            <span className="text-2xl font-black text-sky-500 block mt-1">
+                              {(metrics?.utility_volume_litres || 0).toLocaleString()} L
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 7-Day Trend Chart */}
+                      <div className="mt-6">
+                        <span className="block text-[11px] font-bold text-slate-450 uppercase mb-4">7-Day Daily Volume Trends</span>
+                        <div className="flex items-end justify-between gap-4 overflow-x-auto pb-2 min-h-[160px]">
+                          {metrics?.volume_by_date && metrics.volume_by_date.length > 0 ? (
+                            (() => {
+                              const maxVolume = Math.max(...metrics.volume_by_date.map((d: any) => d.total_volume), 100);
+                              return metrics.volume_by_date.map((day: any) => {
+                                const drinkingPercent = maxVolume > 0 ? (day.drinking_volume / maxVolume) * 100 : 0;
+                                const utilityPercent = maxVolume > 0 ? (day.utility_volume / maxVolume) * 100 : 0;
+                                return (
+                                  <div key={day.date} className="flex flex-col items-center gap-2 flex-1 min-w-[60px]">
+                                    <div className="h-28 w-8 bg-slate-50 rounded-t-lg overflow-hidden flex flex-col justify-end relative group cursor-pointer border border-slate-100">
+                                      {/* Tooltip on hover */}
+                                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-slate-900 text-white text-[10px] p-2 rounded-xl shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 whitespace-nowrap leading-relaxed border border-slate-700">
+                                        <p className="font-extrabold text-blue-400">{day.date}</p>
+                                        <p>Drinking: {(day.drinking_volume || 0).toLocaleString()} L</p>
+                                        <p>Utility: {(day.utility_volume || 0).toLocaleString()} L</p>
+                                        <div className="border-t border-white/20 mt-1 pt-1 font-black">
+                                          Total: {(day.total_volume || 0).toLocaleString()} L
+                                        </div>
+                                      </div>
+                                      {/* Drinking bar (blue) */}
+                                      <div
+                                        style={{ height: `${drinkingPercent}%` }}
+                                        className="bg-blue-600 w-full transition-all duration-500"
+                                      />
+                                      {/* Utility bar (sky) */}
+                                      <div
+                                        style={{ height: `${utilityPercent}%` }}
+                                        className="bg-sky-400 w-full transition-all duration-500 border-t border-white/10"
+                                      />
+                                    </div>
+                                    <span className="text-[9px] font-black text-slate-400 text-center">
+                                      {new Date(day.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })}
+                                    </span>
+                                  </div>
+                                );
+                              });
+                            })()
+                          ) : (
+                            <div className="text-center w-full text-slate-400 text-xs font-semibold py-8">
+                              No trend data available.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Registry Aggregates Card */}
+                    <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col justify-between">
+                      <div>
+                        <span className="block text-xs font-bold text-gray-650 tracking-wider uppercase">Registry Telemetry</span>
+                        <div className="space-y-4 mt-6">
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <span className="text-xs font-bold text-slate-500">Active Tankers</span>
+                            <span className="text-base font-black text-slate-800">{metrics?.active_tankers_count || 0}</span>
+                          </div>
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <span className="text-xs font-bold text-slate-500">Verified Depots</span>
+                            <span className="text-base font-black text-slate-800">{metrics?.verified_sources_count || 0}</span>
+                          </div>
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <span className="text-xs font-bold text-slate-500">Total Registered Customers</span>
+                            <span className="text-base font-black text-slate-800">{metrics?.total_customers_count || 0}</span>
+                          </div>
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <span className="text-xs font-bold text-slate-500">Registered Drivers</span>
+                            <span className="text-base font-black text-slate-800">{metrics?.total_drivers_count || 0}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-500">Orders (Delivered / Total)</span>
+                            <span className="text-base font-black text-slate-800">
+                              {metrics?.delivered_orders_count || 0} / {metrics?.total_orders_count || 0}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 mt-6 flex items-start gap-2.5">
+                        <Activity size={16} className="text-blue-600 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="block text-[10px] font-black text-blue-800 uppercase tracking-wide">Live Audit Mode</span>
+                          <span className="block text-[10px] text-blue-650 font-medium mt-0.5">
+                            Real-time database aggregates calculated dynamically. All values represent verified state updates.
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* System Telemetry Map */}
+                  <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
+                    <div>
+                      <h4 className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                        <Compass size={16} className="text-primary animate-pulse" />
+                        Ecosystem Live Telemetry Map
+                      </h4>
+                      <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                        Live coordinate tracking of all water source depots and active available tankers
+                      </p>
+                    </div>
+                    {(() => {
+                      const adminMarkers = [
+                        ...sources.map(s => ({
+                          id: s.id,
+                          latitude: s.latitude,
+                          longitude: s.longitude,
+                          title: s.name,
+                          iconType: "source" as const,
+                          popupText: `Type: ${s.type.replace(/_/g, " ")} | Status: ${s.verification_status} | Grade: ${s.quality_grade || 'None'}`
+                        })),
+                        ...activeDrivers.filter(d => d.latitude !== null && d.longitude !== null).map(d => ({
+                          id: d.id,
+                          latitude: d.latitude!,
+                          longitude: d.longitude!,
+                          title: `Driver: ${d.user?.first_name} ${d.user?.last_name || ''}`,
+                          iconType: "driver" as const,
+                          popupText: `Plate: ${d.tanker?.plate_number || 'N/A'} | Status: ${d.status}`
+                        }))
+                      ];
+
+                      return (
+                        <MapComponent
+                          height="350px"
+                          zoom={12}
+                          markers={adminMarkers}
+                        />
+                      );
+                    })()}
+                  </div>
+
+                  {/* Borehole Queue and Lab safety logs grid */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Borehole Verification Queue (col-span-5) */}
+                    <div className="lg:col-span-5 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col h-[500px]">
+                      <div className="border-b border-slate-100 pb-4 mb-4">
+                        <h4 className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                          <Droplet size={16} className="text-primary" />
+                          Borehole Verification Queue
+                        </h4>
+                        <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                          Approve or reject private borehole depot registration requests
+                        </p>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+                        {(() => {
+                          const pendingBoreholes = sources.filter(s => s.type === "BOREHOLE" && s.verification_status === "PENDING");
+                          if (pendingBoreholes.length === 0) {
+                            return (
+                              <div className="h-full flex flex-col items-center justify-center text-center text-slate-450 p-6">
+                                <CheckCircle2 size={32} className="text-emerald-500 mb-2" />
+                                <p className="text-xs font-bold text-slate-650">All boreholes verified!</p>
+                                <p className="text-[10px] text-slate-400 mt-1">No pending verification requests in queue.</p>
+                              </div>
+                            );
+                          }
+                          return pendingBoreholes.map((borehole) => {
+                            const selectedGrade = boreholeGrades[borehole.id] || "B";
+                            const isUpdating = updatingSourceId === borehole.id;
+
+                            return (
+                              <div key={borehole.id} className="bg-slate-50 border border-slate-150 rounded-2xl p-4 space-y-3 relative hover:border-slate-350 transition-all">
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center justify-between">
+                                    <h5 className="font-extrabold text-slate-800 text-xs">{borehole.name}</h5>
+                                    <span className="text-[9px] font-bold text-slate-400">
+                                      {new Date(borehole.created_at).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
+                                    <MapPin size={10} className="text-slate-450 shrink-0" />
+                                    {borehole.address}
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center gap-2 border-t border-slate-200/60 pt-3">
+                                  <div className="flex-1 space-y-0.5">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase block">Assign Grade</label>
+                                    <select
+                                      disabled={isUpdating}
+                                      value={selectedGrade}
+                                      onChange={(e) => setBoreholeGrades(prev => ({ ...prev, [borehole.id]: e.target.value }))}
+                                      className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] font-bold focus:outline-none"
+                                    >
+                                      <option value="A">Grade A (Pure)</option>
+                                      <option value="B">Grade B (High Quality)</option>
+                                      <option value="C">Grade C (Sufficient)</option>
+                                      <option value="D">Grade D (Utility Only)</option>
+                                    </select>
+                                  </div>
+
+                                  <div className="flex items-end gap-1.5 mt-auto">
+                                    <button
+                                      disabled={isUpdating}
+                                      onClick={() => handleVerifyBoreholeDirect(borehole.id, "VERIFIED", selectedGrade)}
+                                      className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg shadow-sm transition-all"
+                                    >
+                                      Verify
+                                    </button>
+                                    <button
+                                      disabled={isUpdating}
+                                      onClick={() => handleVerifyBoreholeDirect(borehole.id, "REJECTED", null)}
+                                      className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] rounded-lg shadow-sm transition-all"
+                                    >
+                                      Reject
+                                    </button>
+                                  </div>
+                                </div>
+                                {isUpdating && (
+                                  <div className="absolute inset-0 bg-white/60 rounded-2xl flex items-center justify-center">
+                                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Ecosystem Water Safety Ledger (col-span-7) */}
+                    <div className="lg:col-span-7 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col h-[500px]">
+                      <div className="border-b border-slate-100 pb-4 mb-4">
+                        <h4 className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                          <FileSpreadsheet size={16} className="text-primary" />
+                          Ecosystem Water Safety Ledger
+                        </h4>
+                        <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                          Review all lab quality reports submitted across verified and pending depots
+                        </p>
+                      </div>
+
+                      <div className="flex-1 overflow-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-100 bg-slate-50 text-[9px] font-black uppercase text-slate-550 tracking-wider">
+                              <th className="px-4 py-2.5">Source Depot</th>
+                              <th className="px-4 py-2.5">Date tested</th>
+                              <th className="px-4 py-2.5">pH / TDS / Turbidity</th>
+                              <th className="px-4 py-2.5">Grade</th>
+                              <th className="px-4 py-2.5">Inspector</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-[11px] font-bold">
+                            {safetyLogs.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="px-4 py-12 text-center text-slate-400 font-semibold">
+                                  No safety reports recorded in the ledger yet.
+                                </td>
+                              </tr>
+                            ) : (
+                              safetyLogs.map((log) => (
+                                <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                                  <td className="px-4 py-3 font-extrabold text-slate-900">{log.source_name}</td>
+                                  <td className="px-4 py-3 text-slate-500">
+                                    {new Date(log.tested_at).toLocaleDateString()}
+                                  </td>
+                                  <td className="px-4 py-3 text-slate-600">
+                                    pH {log.ph} / {log.tds} ppm / {log.turbidity} NTU
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase ${["A", "B"].includes(log.grade)
+                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                                      : log.grade === "C"
+                                        ? "bg-blue-50 text-blue-700 border border-blue-100"
+                                        : "bg-amber-50 text-amber-700 border border-amber-100"
+                                      }`}>
+                                      Grade {log.grade}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-slate-500 font-medium">{log.inspector_name}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {/* TAB 4: PROFILE */}
           {activeTab === "profile" && (
-            <div className="bg-white border border-slate-200 rounded-3xl p-8 max-w-xl mx-auto shadow-md">
-              <div className="flex items-center gap-4 border-b border-slate-100 pb-5 mb-5">
+            <div className="space-y-6">
+              <h1 className="md:text-3xl font-bold text-slate-800">My Profile</h1>
+              <p className="text-sm text-slate-500">Manage your administrative credentials, security settings, and permissions</p>
+
+              <div className="bg-white border border-slate-200 rounded-3xl p-8 max-w-xl mx-auto shadow-md">
+                <div className="flex items-center gap-4 border-b border-slate-100 pb-5 mb-5">
                 <div className="h-14 w-14 rounded-2xl bg-[#2f43ff] text-white flex items-center justify-center">
                   <UserIcon size={28} />
                 </div>
@@ -674,7 +1095,8 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
             </div>
-          )}
+          </div>
+        )}
         </>
       )}
     </DashboardLayout>

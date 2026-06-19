@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -83,3 +83,60 @@ async def get_order_timeline(
             for e in events
         ],
     )
+
+
+@router.websocket("/ws/orders/{order_id}/tracking")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    order_id: uuid.UUID,
+    token: str = Query(...),
+):
+    from app.core.database import AsyncSessionLocal
+    from app.modules.auth.repository import user_repo
+    from app.modules.orders.repository import order_repo
+    from app.modules.tracking.websocket import manager
+    from jose import jwt, JWTError
+    from app.core.config import settings
+    from app.core.security import ALGORITHM
+
+    # 1. Decode token & verify user
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        user_id_str = payload.get("sub")
+        if not user_id_str:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+        user_id = uuid.UUID(user_id_str)
+    except (JWTError, ValueError):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    async with AsyncSessionLocal() as db:
+        user = await user_repo.get_by_id(db, user_id)
+        if not user or not user.is_active:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        # 2. Get order
+        order = await order_repo.get_by_id(db, order_id)
+        if not order:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        # 3. Check access
+        is_authorized = (
+            user.id == order.customer_id
+            or user.id == order.assigned_driver_id
+            or user.role == "ADMIN"
+        )
+        if not is_authorized:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+    # Accept connection and add to manager
+    await manager.connect(str(order_id), websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(str(order_id), websocket)

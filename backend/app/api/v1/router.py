@@ -6,6 +6,10 @@ from app.modules.drivers.router import router as drivers_router
 from app.modules.orders.router import router as orders_router
 from app.modules.tracking.router import router as tracking_router
 from app.modules.quality_reports.router import router as quality_reports_router
+from app.modules.payments.router import router as payments_router
+from app.modules.ratings.router import router as ratings_router
+from app.modules.notifications.router import router as notifications_router
+from app.modules.admin.router import router as admin_router
 
 api_router = APIRouter()
 
@@ -16,3 +20,7 @@ api_router.include_router(drivers_router)
 api_router.include_router(orders_router)
 api_router.include_router(tracking_router)
 api_router.include_router(quality_reports_router)
+api_router.include_router(payments_router)
+api_router.include_router(ratings_router)
+api_router.include_router(notifications_router)
+api_router.include_router(admin_router)
