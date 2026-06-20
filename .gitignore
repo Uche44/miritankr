@@ -75,3 +75,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 .vercel
+
+# Root DBs and Hackathon Specific Documentation
+/*.db
+test_miritankr.db
+docs/
+overview.md
+
