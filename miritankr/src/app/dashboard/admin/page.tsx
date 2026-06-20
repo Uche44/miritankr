@@ -347,7 +347,7 @@ export default function AdminDashboardPage() {
           {/* TAB 1: OVERVIEW */}
           {activeTab === "overview" && (
             <div className="space-y-8">
-              <h1 className="md:text-3xl font-bold text-slate-800">Welcome back, Admin {user?.first_name}</h1>
+              <h1 className="md:text-3xl font-bold text-slate-800">Welcome back, {user?.first_name} {user?.last_name}</h1>
               <p className="text-sm text-slate-500">Administrative dashboard for managing tanker activities, ensuring water facility safety and ensuring efficient water distribution in Enugu State</p>
               {/* Stats Cards Row */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -1073,48 +1073,48 @@ export default function AdminDashboardPage() {
 
               <div className="bg-white border border-slate-200 rounded-3xl p-8 max-w-xl mx-auto shadow-md">
                 <div className="flex items-center gap-4 border-b border-slate-100 pb-5 mb-5">
-                <div className="h-14 w-14 rounded-2xl bg-[#2f43ff] text-white flex items-center justify-center">
-                  <UserIcon size={28} />
-                </div>
-                <div>
-                  <h3 className="text-xl font-black text-slate-900">{user?.first_name} {user?.last_name}</h3>
-                  <span className="text-xs font-bold text-gray-650 tracking-wide uppercase">{user?.role} Profile</span>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <span className="block text-[10px] font-bold text-slate-400 uppercase">First Name</span>
-                    <span className="text-sm font-bold text-slate-800">{user?.first_name}</span>
+                  <div className="h-14 w-14 rounded-2xl bg-[#2f43ff] text-white flex items-center justify-center">
+                    <UserIcon size={28} />
                   </div>
                   <div>
-                    <span className="block text-[10px] font-bold text-slate-400 uppercase">Last Name</span>
-                    <span className="text-sm font-bold text-slate-800">{user?.last_name}</span>
+                    <h3 className="text-xl font-black text-slate-900">{user?.first_name} {user?.last_name}</h3>
+                    <span className="text-xs font-bold text-gray-650 tracking-wide uppercase">{user?.role} Profile</span>
                   </div>
                 </div>
 
-                <div>
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Email Address</span>
-                  <span className="text-sm font-bold text-slate-800">{user?.email}</span>
-                </div>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="block text-[10px] font-bold text-slate-400 uppercase">First Name</span>
+                      <span className="text-sm font-bold text-slate-800">{user?.first_name}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] font-bold text-slate-400 uppercase">Last Name</span>
+                      <span className="text-sm font-bold text-slate-800">{user?.last_name}</span>
+                    </div>
+                  </div>
 
-                <div>
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Phone Number</span>
-                  <span className="text-sm font-bold text-slate-800">{user?.phone}</span>
-                </div>
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase">Email Address</span>
+                    <span className="text-sm font-bold text-slate-800">{user?.email}</span>
+                  </div>
 
-                <div>
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Account Status</span>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 mt-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <CheckCircle2 size={12} />
-                    Active Account
-                  </span>
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase">Phone Number</span>
+                    <span className="text-sm font-bold text-slate-800">{user?.phone}</span>
+                  </div>
+
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase">Account Status</span>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 mt-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <CheckCircle2 size={12} />
+                      Active Account
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
         </>
       )}
     </DashboardLayout>
