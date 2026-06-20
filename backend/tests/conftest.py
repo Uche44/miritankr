@@ -7,6 +7,11 @@ from app.main import app
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///./test_miritankr.db"
 
+# Enforce mock payment modes during test runs
+from app.core.config import settings
+settings.PAYSTACK_SECRET_KEY = ""
+settings.PAYSTACK_PUBLIC_KEY = ""
+
 @pytest.fixture(scope="session")
 def event_loop():
     """
@@ -26,7 +31,7 @@ async def test_engine(event_loop):
     """
     engine = create_async_engine(
         TEST_DATABASE_URL, 
-        connect_args={"check_same_thread": False}
+        connect_args={"check_same_thread": False, "timeout": 30}
     )
     
     # Create tables synchronously using run_sync

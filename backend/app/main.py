@@ -13,6 +13,13 @@ app = FastAPI(
 @app.on_event("startup")
 async def on_startup():
     from app.core.database import AsyncSessionLocal, seed_mock_sources
+    import logging
+    logger = logging.getLogger("uvicorn.error")
+    if settings.SECRET_KEY == "SUPER_SECRET_KEY_FOR_LOCAL_DEV_CHANGE_IN_PROD_12345":
+        logger.warning(
+            "SECURITY WARNING: SECRET_KEY is set to default development value. "
+            "Please configure a secure SECRET_KEY environment variable in production!"
+        )
     async with AsyncSessionLocal() as db:
         await seed_mock_sources(db)
 
@@ -22,9 +29,10 @@ async def redirect_to_docs():
 
 
 # Configure CORS Middleware for Next.js frontend communication
+origins = [o.strip() for o in settings.BACKEND_CORS_ORIGINS.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust in production
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

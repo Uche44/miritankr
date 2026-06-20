@@ -74,6 +74,9 @@ class OrderRepository:
         tanker_id: uuid.UUID,
         source_id: Optional[uuid.UUID],
         calculated_price: float,
+        water_cost: float,
+        transit_cost: float,
+        distance_km: float,
     ) -> Order:
         """
         Create a new order, immediately linked to the chosen driver and their tanker.
@@ -94,6 +97,9 @@ class OrderRepository:
             scheduled_at=scheduled_at,
             status="PENDING",
             price=calculated_price,
+            water_cost=water_cost,
+            transit_cost=transit_cost,
+            distance_km=distance_km,
             assigned_driver_id=driver_id,
             assigned_tanker_id=tanker_id,
             source_id=source_id,

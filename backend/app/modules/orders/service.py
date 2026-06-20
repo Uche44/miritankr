@@ -110,7 +110,50 @@ class OrderService:
                     detail="DRINKING water orders require a driver whose default water source is VERIFIED.",
                 )
 
-        price = self.calculate_price(order_in.water_type, order_in.quantity_litres)
+        # Get water source coordinates and price per litre
+        source_lat, source_lng = 6.4253, 7.4042 # default to 9th mile
+        price_per_litre = None
+        
+        if source_id:
+            source_result = await db.execute(
+                select(WaterSource).where(WaterSource.id == source_id)
+            )
+            source = source_result.scalars().first()
+            if source:
+                source_lat = source.latitude
+                source_lng = source.longitude
+                price_per_litre = source.price_per_litre
+
+        if price_per_litre is None:
+            price_per_litre = 2.5 if order_in.water_type == "DRINKING" else 1.5
+
+        # Get driver coordinates
+        from app.modules.drivers.models import Driver as DriverModel
+        driver_model_result = await db.execute(
+            select(DriverModel).where(DriverModel.id == order_in.driver_id)
+        )
+        driver_rec = driver_model_result.scalars().first()
+        driver_lat = driver_rec.latitude if (driver_rec and driver_rec.latitude is not None) else 6.44
+        driver_lng = driver_rec.longitude if (driver_rec and driver_rec.longitude is not None) else 7.50
+
+        # Calculate distances using Haversine formula
+        import math
+        def calculate_haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+            R = 6371.0 # Earth radius in km
+            dlat = math.radians(lat2 - lat1)
+            dlon = math.radians(lon2 - lon1)
+            a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+            return R * c
+
+        dist_driver_to_depot = calculate_haversine(driver_lat, driver_lng, source_lat, source_lng)
+        dist_depot_to_customer = calculate_haversine(source_lat, source_lng, order_in.latitude, order_in.longitude)
+        distance_km = dist_driver_to_depot + dist_depot_to_customer
+
+        water_cost = float(order_in.quantity_litres * price_per_litre)
+        transit_cost = float(500.0 + distance_km * 50.0)
+        price = water_cost + transit_cost
+
         db_order = await order_repo.create(
             db,
             order_in=order_in,
@@ -119,6 +162,9 @@ class OrderService:
             tanker_id=tanker.id,
             source_id=source_id,
             calculated_price=price,
+            water_cost=water_cost,
+            transit_cost=transit_cost,
+            distance_km=distance_km,
         )
 
         # Append ORDER_CREATED tracking event (immutable audit trail)

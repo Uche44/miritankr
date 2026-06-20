@@ -77,6 +77,9 @@ class OrderResponse(BaseModel):
     assigned_driver_id: Optional[uuid.UUID] = None
     source_id: Optional[uuid.UUID] = None
     price: float
+    water_cost: float
+    transit_cost: float
+    distance_km: float
     created_at: datetime
     updated_at: datetime
     payment_status: Optional[str] = None

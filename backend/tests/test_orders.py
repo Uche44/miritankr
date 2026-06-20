@@ -123,17 +123,17 @@ async def test_orders_workflow():
                                 headers={"Authorization": f"Bearer {cust1_token}"})
         assert res_det1.status_code == 200
         det1 = res_det1.json()["data"]
-        assert det1["price"] == 15000.0
+        assert round(det1["price"], 2) == 20545.57
         assert det1["water_type"] == "UTILITY"
         assert det1["quantity_litres"] == 10000
         assert det1["assigned_driver_id"] == driver_id
         assert det1["assigned_tanker_id"] == tanker_id
-
+ 
         res_det2 = await ac.get(f"/api/v1/orders/{order2_id}",
                                 headers={"Authorization": f"Bearer {cust1_token}"})
         assert res_det2.status_code == 200
         det2 = res_det2.json()["data"]
-        assert det2["price"] == 12500.0
+        assert round(det2["price"], 2) == 10584.13
         assert det2["water_type"] == "DRINKING"
         assert det2["scheduled_at"] is not None
 

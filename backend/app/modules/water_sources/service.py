@@ -83,6 +83,8 @@ class WaterSourceService:
         else:
             # If suspended or rejected, we can clear or keep quality grade. Usually clear it.
             update_data["quality_grade"] = None
+        if verify_in.price_per_litre is not None:
+            update_data["price_per_litre"] = verify_in.price_per_litre
 
         updated_source = await water_source_repo.update(db, db_source, update_data)
         await db.commit()

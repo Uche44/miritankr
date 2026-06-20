@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, DateTime, Integer, ForeignKey, Numeric, func
+from sqlalchemy import String, DateTime, Integer, ForeignKey, Numeric, Float, func
 from app.core.database import Base
 
 class Order(Base):
@@ -61,6 +61,24 @@ class Order(Base):
     price: Mapped[float] = mapped_column(
         Numeric(12, 2), 
         nullable=False
+    )
+    water_cost: Mapped[float] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+        default=0.0,
+        server_default="0.0"
+    )
+    transit_cost: Mapped[float] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+        default=0.0,
+        server_default="0.0"
+    )
+    distance_km: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        default=0.0,
+        server_default="0.0"
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, 

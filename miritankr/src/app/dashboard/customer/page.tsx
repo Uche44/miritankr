@@ -79,6 +79,9 @@ interface WaterSource {
   verification_status: string;
   quality_grade: string | null;
   address: string;
+  latitude: number;
+  longitude: number;
+  price_per_litre: number;
 }
 
 interface Order {
@@ -98,6 +101,9 @@ interface Order {
   scheduled_at: string | null;
   payment_status?: string | null;
   payment_reference?: string | null;
+  water_cost?: number;
+  transit_cost?: number;
+  distance_km?: number;
 }
 
 interface TrackingEvent {
@@ -676,9 +682,23 @@ export default function CustomerDashboardPage() {
     }
   }, [watchedDriverId, isDrinkingAllowed]);
 
-  // Pricing calculations
-  const baseRate = watchedWaterType === "DRINKING" ? 2.5 : 1.5;
-  const computedPrice = watchedQuantity * baseRate;
+  // Pricing calculations based on admin regulations
+  const sourcePrice = selectedDriverSource?.price_per_litre;
+  const baseRate = sourcePrice !== undefined && sourcePrice !== null ? sourcePrice : (watchedWaterType === "DRINKING" ? 2.5 : 1.5);
+  
+  const driverLat = selectedDriver?.latitude ?? 6.44;
+  const driverLng = selectedDriver?.longitude ?? 7.50;
+  const sourceLat = selectedDriverSource?.latitude ?? 6.4253;
+  const sourceLng = selectedDriverSource?.longitude ?? 7.4042;
+  
+  const distDriverToSource = getRawDistance(driverLat, driverLng, sourceLat, sourceLng);
+  const distSourceToCust = getRawDistance(sourceLat, sourceLng, watchedLatitude, watchedLongitude);
+  
+  const totalDistanceKm = watchedDriverId ? ((distDriverToSource === Infinity ? 0 : distDriverToSource) + (distSourceToCust === Infinity ? 0 : distSourceToCust)) : 0;
+  
+  const waterCost = watchedQuantity * baseRate;
+  const transitCost = watchedDriverId ? (500 + totalDistanceKm * 50) : 0;
+  const computedPrice = waterCost + transitCost;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -1043,7 +1063,11 @@ export default function CustomerDashboardPage() {
                         />
                         <div>
                           <span className="block font-extrabold text-sm text-slate-800">DRINKING WATER</span>
-                          <span className="block text-[10px] text-slate-400 mt-0.5">Verified Depot Sourced (2.5 ₦/L)</span>
+                          <span className="block text-[10px] text-slate-400 mt-0.5">
+                            {watchedDriverId && selectedDriverSource 
+                              ? `Verified Depot Sourced (${baseRate.toFixed(2)} ₦/L)`
+                              : "Verified Depot Sourced (2.50 ₦/L)"}
+                          </span>
                         </div>
                       </label>
 
@@ -1061,7 +1085,11 @@ export default function CustomerDashboardPage() {
                         />
                         <div>
                           <span className="block font-extrabold text-sm text-slate-800">UTILITY WATER</span>
-                          <span className="block text-[10px] text-slate-400 mt-0.5">Construction / Gardens (1.5 ₦/L)</span>
+                          <span className="block text-[10px] text-slate-400 mt-0.5">
+                            {watchedDriverId && selectedDriverSource 
+                              ? `Depot Sourced (${baseRate.toFixed(2)} ₦/L)`
+                              : "Construction / Gardens (1.50 ₦/L)"}
+                          </span>
                         </div>
                       </label>
                     </div>
@@ -1177,14 +1205,41 @@ export default function CustomerDashboardPage() {
                   </div>
 
                   {/* Locked Quote Summary Card */}
-                  <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-md flex items-center justify-between">
-                    <div>
-                      <span className="block text-[10px] text-slate-400 uppercase tracking-widest font-extrabold">Total Locked Quote Price</span>
-                      <span className="text-2xl font-black block mt-1 text-emerald-400">₦ {computedPrice.toLocaleString()}</span>
+                  <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-md space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                      <div>
+                        <span className="block text-[10px] text-slate-400 uppercase tracking-widest font-extrabold">Total Locked Quote Price</span>
+                        <span className="text-2xl font-black block mt-1 text-emerald-400">
+                          ₦ {computedPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="block text-[10px] text-slate-450 uppercase font-semibold">Total Distance</span>
+                        <span className="text-sm font-bold text-white block mt-0.5">
+                          {watchedDriverId ? `${totalDistanceKm.toFixed(2)} km` : "0.00 km"}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className="block text-[10px] text-slate-450 uppercase font-semibold">Water Cost</span>
-                      <span className="text-xs font-bold text-white block mt-0.5">{watchedQuantity.toLocaleString()}L @ {baseRate} ₦/L</span>
+                    
+                    <div className="grid grid-cols-2 gap-4 text-xs">
+                      <div>
+                        <span className="block text-[10px] text-slate-400 uppercase font-semibold">Water Cost</span>
+                        <span className="font-bold text-slate-200 mt-1 block">
+                          ₦ {waterCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                        </span>
+                        <span className="text-[10px] text-slate-500 block mt-0.5">
+                          {watchedQuantity.toLocaleString()}L @ {baseRate.toFixed(2)} ₦/L
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] text-slate-400 uppercase font-semibold">Transit Fee</span>
+                        <span className="font-bold text-slate-200 mt-1 block">
+                          ₦ {transitCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                        </span>
+                        <span className="text-[10px] text-slate-500 block mt-0.5">
+                          ₦ 500.00 flat + ₦ 50.00/km
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -1300,6 +1355,19 @@ export default function CustomerDashboardPage() {
                         {getStatusBadge(selectedOrder.status)}
                         <span className="text-xs font-black text-primary">₦ {selectedOrder.price.toLocaleString()}</span>
                       </div>
+                      
+                      {selectedOrder.water_cost !== undefined && selectedOrder.transit_cost !== undefined && (
+                        <div className="mt-3 bg-slate-50 border border-slate-150 p-3 rounded-2xl text-[10px] font-semibold text-slate-600 space-y-1">
+                          <div className="flex justify-between">
+                            <span>Water Cost:</span>
+                            <span className="font-bold text-slate-800">₦ {selectedOrder.water_cost.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Transit Cost ({selectedOrder.distance_km?.toFixed(2)} km):</span>
+                            <span className="font-bold text-slate-800">₦ {selectedOrder.transit_cost.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {loadingTracking ? (

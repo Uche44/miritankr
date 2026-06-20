@@ -26,6 +26,12 @@ class WaterSource(Base, SoftDeleteMixin):
         default="PENDING", 
         nullable=False  # PENDING, VERIFIED, SUSPENDED, REJECTED
     )
+    price_per_litre: Mapped[float] = mapped_column(
+        Float,
+        default=2.0,
+        server_default="2.0",
+        nullable=False
+    )
     quality_grade: Mapped[Optional[str]] = mapped_column(
         String(5), 
         nullable=True   # A, B, C, D

@@ -26,6 +26,7 @@ class WaterSourceBase(BaseModel):
     address: str = Field(..., min_length=1)
     latitude: float = Field(..., ge=-90.0, le=90.0)
     longitude: float = Field(..., ge=-180.0, le=180.0)
+    price_per_litre: float = Field(2.0, description="Price per litre in NGN")
 
     @field_validator("type")
     @classmethod
@@ -71,6 +72,7 @@ class WaterSourceDetail(BaseModel):
     last_verified_at: Optional[datetime] = None
     owner_id: Optional[uuid.UUID] = None
     created_at: datetime
+    price_per_litre: float
     quality_reports: List[QualityReportStub] = []
     location: SourceLocation
 
@@ -84,6 +86,7 @@ class WaterSourceDetailEnvelope(BaseEnvelope):
 class WaterSourceVerifyRequest(BaseModel):
     verification_status: str = Field(..., description="PENDING, VERIFIED, SUSPENDED, REJECTED")
     quality_grade: Optional[str] = Field(None, description="Water grade (A, B, C, D)")
+    price_per_litre: Optional[float] = Field(None, description="Admin regulated price per litre in NGN")
 
     @field_validator("verification_status")
     @classmethod

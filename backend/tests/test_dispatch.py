@@ -127,12 +127,15 @@ async def test_marketplace_full_lifecycle():
         order_id = res_order.json()["data"]["order_id"]
         assert res_order.json()["data"]["status"] == "PENDING"
 
-        # Price check: 5000 L UTILITY @ 1.5 NGN/L = 7500
+        # Price check: 5000 L UTILITY @ 2.0 NGN/L (default source price) + transit cost = 10600.37
         res_detail = await ac.get(f"/api/v1/orders/{order_id}",
                                    headers={"Authorization": f"Bearer {customer_token}"})
         assert res_detail.status_code == 200
         detail = res_detail.json()["data"]
-        assert detail["price"] == 7500.0
+        assert round(detail["price"], 2) == 10600.37
+        assert round(detail["water_cost"], 2) == 10000.00
+        assert round(detail["transit_cost"], 2) == 600.37
+        assert round(detail["distance_km"], 4) == 2.0075
         assert detail["assigned_driver_id"] == driver_id
         assert detail["assigned_tanker_id"] == tanker_id
         assert detail["source_id"] == source_id  # auto-resolved from tanker default

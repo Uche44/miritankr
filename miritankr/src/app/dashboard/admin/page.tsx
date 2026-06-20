@@ -40,6 +40,7 @@ interface WaterSource {
   last_verified_at: string | null;
   owner_id: string | null;
   created_at: string;
+  price_per_litre: number;
 }
 
 interface QualityReport {
@@ -88,6 +89,7 @@ export default function AdminDashboardPage() {
   // Status updating forms
   const [updateStatus, setUpdateStatus] = useState("PENDING");
   const [updateGrade, setUpdateGrade] = useState("A");
+  const [updatePrice, setUpdatePrice] = useState(2.0);
   const [updatingSourceId, setUpdatingSourceId] = useState<string | null>(null);
 
   // Tanker status updating states
@@ -127,10 +129,12 @@ export default function AdminDashboardPage() {
     setError(null);
     setSuccess(null);
     setUpdatingSourceId(sourceId);
+    const existingSource = sources.find(s => s.id === sourceId);
     try {
       const payload = {
         verification_status: status,
-        quality_grade: status === "VERIFIED" ? (grade || "B") : null
+        quality_grade: status === "VERIFIED" ? (grade || "B") : null,
+        price_per_litre: existingSource?.price_per_litre ?? 2.0
       };
 
       const res = await apiFetch(`/admin/water-sources/${sourceId}/verify`, {
@@ -186,6 +190,7 @@ export default function AdminDashboardPage() {
     setSelectedSource(source);
     setUpdateStatus(source.verification_status);
     setUpdateGrade(source.quality_grade || "A");
+    setUpdatePrice(source.price_per_litre ?? 2.0);
     setLoadingReports(true);
     setSelectedSourceReports([]);
     try {
@@ -209,7 +214,8 @@ export default function AdminDashboardPage() {
     try {
       const payload = {
         verification_status: updateStatus,
-        quality_grade: updateStatus === "VERIFIED" ? updateGrade : null
+        quality_grade: updateStatus === "VERIFIED" ? updateGrade : null,
+        price_per_litre: Number(updatePrice)
       };
 
       const res = await apiFetch(`/admin/water-sources/${selectedSource.id}/verify`, {
@@ -532,6 +538,18 @@ export default function AdminDashboardPage() {
                             </select>
                           </div>
                         )}
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase">Regulated Price per Litre (NGN)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            value={updatePrice}
+                            onChange={(e) => setUpdatePrice(parseFloat(e.target.value) || 0)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-xs font-semibold focus:outline-none"
+                          />
+                        </div>
                       </div>
 
                       <button

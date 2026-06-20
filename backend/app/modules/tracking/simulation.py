@@ -24,6 +24,11 @@ async def _simulate_movement_loop(
     steps = 10  # 10 steps to reach the destination
     delay = 3.0  # 3 seconds between steps
     
+    start_lat = float(start_lat)
+    start_lng = float(start_lng)
+    target_lat = float(target_lat)
+    target_lng = float(target_lng)
+
     current_lat = start_lat
     current_lng = start_lng
 

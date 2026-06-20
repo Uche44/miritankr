@@ -53,6 +53,7 @@ async def get_water_source_detail(
         last_verified_at=source.last_verified_at,
         owner_id=source.owner_id,
         created_at=source.created_at,
+        price_per_litre=source.price_per_litre,
         quality_reports=reports,
         location=SourceLocation(
             latitude=source.latitude,
