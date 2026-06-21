@@ -70,18 +70,17 @@ const Navbar: React.FC = () => {
                 <div className="hidden md:flex items-center gap-4">
                     {isReady && isLoggedIn && user ? (
                         <>
-                            <Link 
-                                href={getDashboardPath()} 
-                                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl transition-all border ${
-                                    isScrolled 
-                                        ? "border-slate-200 text-slate-700 hover:bg-slate-50" 
-                                        : "border-white/20 text-white hover:bg-white/10"
-                                }`}
+                            <Link
+                                href={getDashboardPath()}
+                                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl transition-all border ${isScrolled
+                                    ? "border-slate-200 text-slate-700 hover:bg-slate-50"
+                                    : "border-white/20 text-white hover:bg-white/10"
+                                    }`}
                             >
                                 <UserIcon size={14} />
                                 <span>Dashboard</span>
                             </Link>
-                            <button 
+                            <button
                                 onClick={() => clearAuth()}
                                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl bg-red-500 hover:bg-red-600 text-white transition-all shadow-md active:scale-95"
                             >
@@ -91,14 +90,14 @@ const Navbar: React.FC = () => {
                         </>
                     ) : (
                         <>
-                            <Link 
-                                href="/login" 
+                            <Link
+                                href="/login"
                                 className={`font-semibold text-sm transition-colors ${isScrolled ? "text-slate-700 hover:text-brand" : "text-white hover:text-slate-200"}`}
                             >
                                 Log In
                             </Link>
-                            <Link 
-                                href="/register" 
+                            <Link
+                                href="/register"
                                 className="rounded-xl bg-[#2f43ff] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:scale-105 hover:shadow-lg hover:brightness-110"
                             >
                                 Sign Up
@@ -122,32 +121,32 @@ const Navbar: React.FC = () => {
                 className={`overflow-hidden transition-all duration-300 md:hidden ${isOpen ? "max-h-96" : "max-h-0"
                     }`}
             >
-                <div className="space-y-1 bg-slate-900/95 border-t border-slate-800 px-4 py-5 backdrop-blur-md">
+                <div className="space-y-1 bg-transparent border-t border-gray-200 px-4 py-5 backdrop-blur-md">
                     {navLinks.map((link) => (
                         <a
                             key={link.label}
                             href={link.href}
-                            className="block rounded-lg px-4 py-3 font-medium text-slate-300 transition-colors hover:bg-slate-850 hover:text-white"
+                            className="block rounded-lg px-4 py-3 font-medium text-white transition-colors"
                             onClick={() => setIsOpen(false)}
                         >
                             {link.label}
                         </a>
                     ))}
 
-                    <div className="pt-4 border-t border-slate-800 flex flex-col gap-3">
+                    <div className="pt-4 border-t border-gray-200 flex flex-col gap-3">
                         {isReady && isLoggedIn && user ? (
                             <>
-                                <div className="text-slate-400 text-xs px-4">
-                                  Logged in as: <span className="text-white font-semibold">{user.first_name}</span> ({user.role})
+                                <div className="text-white text-xs px-4">
+                                    Logged in as: <span className="text-white font-semibold">{user.first_name}</span>{''} ({user.role})
                                 </div>
                                 <Link
                                     href={getDashboardPath()}
-                                    className="w-full text-center rounded-xl bg-slate-800 py-3 font-semibold text-white text-sm hover:bg-slate-750 transition-colors"
+                                    className="w-full text-center rounded-xl bg-primary py-3 font-semibold text-white text-sm transition-colors"
                                     onClick={() => setIsOpen(false)}
                                 >
                                     Go to Dashboard
                                 </Link>
-                                <button 
+                                <button
                                     onClick={() => { clearAuth(); setIsOpen(false); }}
                                     className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-red-650 hover:bg-red-600 py-3 font-semibold text-white text-sm transition-colors"
                                 >
@@ -159,7 +158,7 @@ const Navbar: React.FC = () => {
                             <>
                                 <Link
                                     href="/login"
-                                    className="w-full text-center rounded-xl bg-slate-800 py-3 font-semibold text-white text-sm hover:bg-slate-750 transition-colors"
+                                    className="w-full text-center rounded-xl bg-white py-3 font-semibold text-primary text-sm hover:bg-slate-750 transition-colors"
                                     onClick={() => setIsOpen(false)}
                                 >
                                     Log In
